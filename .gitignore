@@ -1,0 +1,20 @@
+# Python & Environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# PyInstaller & Build artifacts
+dist/
+build/
+*.spec
+
+# Inno Setup output
+installer/Output/
+
+# App-specific runtime/history
+ffmpeg/
+*.log
+.softcurse_history.json
