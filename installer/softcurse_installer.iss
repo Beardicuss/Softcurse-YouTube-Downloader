@@ -133,8 +133,7 @@ begin
   Memo.Text :=
     'REQUIREMENTS:' + #13#10 +
     '  ffmpeg — bundled with installer if available' + #13#10 +
-    '  Internet connection — for YouTube downloads' + #13#10 +
-    #13#10 +
+    '  Internet connection — for YouTube downloads' + #13#10#13#10 +
     'Optional (installable from app Settings tab):' + #13#10 +
     '  Pillow — thumbnail previews' + #13#10 +
     '  mutagen — metadata tag writing' + #13#10 +
