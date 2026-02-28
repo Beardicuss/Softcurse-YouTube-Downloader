@@ -11,7 +11,7 @@
 ; ─────────────────────────────────────────────────────────────────────────────
 
 #define AppName      "Softcurse YT Downloader"
-#define AppVersion   "4.0"
+#define AppVersion   "4.1"
 #define AppPublisher "Softcurse"
 #define AppURL       "https://softcurse.dev"
 #define AppExeName   "Softcurse_YT_Downloader.exe"
