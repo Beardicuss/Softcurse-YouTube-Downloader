@@ -5,7 +5,7 @@ Built-in player for MP3/FLAC/WAV files with:
   - Play/Pause/Stop/Prev/Next
   - Seek bar, volume, file browser
   - Playlist (auto-loads folder)
-Requires: pygame (for audio) — gracefully disabled if missing.
+Requires: pygame (for audio)  gracefully disabled if missing.
 """
 import tkinter as tk
 from tkinter import filedialog
@@ -15,22 +15,22 @@ import random
 import math
 import time
 
-# ── Palette ───────────────────────────────────────────────────────────────────
-BG          = "#020202"
-CYAN        = "#00ffff"
-CYAN_DIM    = "#007a7a"
-CYAN_DARK   = "#003333"
-DARK_PANEL  = "#050f0f"
-MAGENTA     = "#ff00ff"
+#  Palette  SOFTCURSE/SYS 
+BG          = "#020202"       # Void Black
+CYAN        = "#00ffff"       # Primary Accent
+CYAN_DIM    = "#007373"       # Dim Aqua
+CYAN_DARK   = "#001a1a"       # Deep teal
+DARK_PANEL  = "#050810"       # Abyss Glass
+MAGENTA     = "#ff00ff"       # Glitch/Alert
 MAGENTA_DIM = "#660066"
-WHITE       = "#e0f7f7"
-TEXT_DIM    = "#407070"
-SUCCESS     = "#00ff88"
-ERROR       = "#ff3355"
-BLUE        = "#0088ff"
-ORANGE      = "#ff8800"
-GRID_COLOR  = "#0a2a2a"
-FONT_MONO   = "Courier New"
+WHITE       = "#e8f4f8"       # Ice White
+TEXT_DIM    = "#004a4a"       # Deep dim labels
+SUCCESS     = "#00e676"       # Success green
+ERROR       = "#ff5252"       # Error red
+BLUE        = "#0088ff"       # Neon Blue
+ORANGE      = "#ff6b35"       # Electric Orange
+GRID_COLOR  = "#001f1f"       # Ghost cyan grid
+FONT_MONO   = "Consolas"
 
 AUDIO_EXTS = (".mp3", ".flac", ".wav", ".ogg", ".opus", ".m4a", ".aac")
 
@@ -52,10 +52,10 @@ def install_pygame(log_cb=None):
             [sys.executable, "-m", "pip", "install", "pygame"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
-        log("✅ pygame installed! Restart to enable player.")
+        log(" pygame installed! Restart to enable player.")
         return True
     except Exception as e:
-        log(f"❌ pygame install failed: {e}")
+        log(f" pygame install failed: {e}")
         return False
 
 
@@ -120,7 +120,7 @@ class AudioPlayer:
             pass
 
     def set_volume(self, vol: float):
-        """vol: 0.0 – 1.0"""
+        """vol: 0.0  1.0"""
         try:
             self._ensure_init()
             self._mixer.music.set_volume(max(0.0, min(1.0, vol)))
@@ -170,7 +170,7 @@ class AudioPlayer:
 
 class PlayerPanel(tk.Frame):
     """
-    Self-contained player widget — embed it in any frame.
+    Self-contained player widget  embed it in any frame.
     """
     def __init__(self, parent, **kwargs):
         super().__init__(parent, bg=BG, **kwargs)
@@ -194,16 +194,16 @@ class PlayerPanel(tk.Frame):
         self._init_waveform()
         self._animate_wave()
 
-    # ── Build UI ──────────────────────────────────────────────────────────────
+    #  Build UI 
     def _build(self):
         # Header
         hdr = tk.Frame(self, bg=BG)
         hdr.pack(fill="x", pady=(0,6))
-        tk.Label(hdr, text="▸ MINI PLAYER", fg=CYAN_DIM, bg=BG,
-                 font=(FONT_MONO,8)).pack(side="left")
+        tk.Label(hdr, text=" MINI PLAYER", fg=CYAN_DIM, bg=BG,
+                 font=(FONT_MONO,10)).pack(side="left")
         if not self._pygame_ok:
-            tk.Label(hdr, text="[ pygame not installed — see Settings ]",
-                     fg=ERROR, bg=BG, font=(FONT_MONO,7)).pack(side="right")
+            tk.Label(hdr, text="[ pygame not installed  see Settings ]",
+                     fg=ERROR, bg=BG, font=(FONT_MONO,11)).pack(side="right")
 
         # Waveform canvas
         self.wave_canvas = tk.Canvas(self, height=80, bg=DARK_PANEL,
@@ -216,19 +216,19 @@ class PlayerPanel(tk.Frame):
         np_frame.pack(fill="x", pady=(0,4))
         self.np_label = tk.Label(np_frame, textvariable=self._playing_title,
                                  fg=CYAN, bg=DARK_PANEL,
-                                 font=(FONT_MONO,9,"bold"),
+                                 font=(FONT_MONO,11,"bold"),
                                  wraplength=560, anchor="w", justify="left")
         self.np_label.pack(fill="x")
         self.np_meta  = tk.Label(np_frame, text="",
                                  fg=TEXT_DIM, bg=DARK_PANEL,
-                                 font=(FONT_MONO,7), anchor="w")
+                                 font=(FONT_MONO,11), anchor="w")
         self.np_meta.pack(fill="x")
 
         # Seek bar
         seek_row = tk.Frame(self, bg=BG)
         seek_row.pack(fill="x", pady=(0,4))
         self.time_cur = tk.Label(seek_row, text="0:00", fg=TEXT_DIM, bg=BG,
-                                  font=(FONT_MONO,7), width=5)
+                                  font=(FONT_MONO,11), width=5)
         self.time_cur.pack(side="left")
 
         sty = self._make_scale_style("Seek.Horizontal.TScale", CYAN)
@@ -242,7 +242,7 @@ class PlayerPanel(tk.Frame):
         self.seek_bar.bind("<ButtonRelease-1>", self._on_seek_release)
 
         self.time_tot = tk.Label(seek_row, text="0:00", fg=TEXT_DIM, bg=BG,
-                                  font=(FONT_MONO,7), width=5)
+                                  font=(FONT_MONO,11), width=5)
         self.time_tot.pack(side="left")
 
         # Controls row
@@ -250,29 +250,29 @@ class PlayerPanel(tk.Frame):
         ctrl.pack(fill="x", pady=(0,4))
 
         btn_specs = [
-            ("⏮",  self._prev,        CYAN),
-            ("▶",   self._play_pause,  CYAN),
-            ("⏹",  self._stop,        CYAN),
-            ("⏭",  self._next,        CYAN),
-            ("🔀",  self._shuffle,     MAGENTA_DIM),
+            ("",  self._prev,        CYAN),
+            ("",   self._play_pause,  CYAN),
+            ("",  self._stop,        CYAN),
+            ("",  self._next,        CYAN),
+            ("",  self._shuffle,     MAGENTA_DIM),
         ]
         self._play_btn = None
         for sym, cmd, color in btn_specs:
             b = tk.Button(ctrl, text=sym, command=cmd,
                           fg=color, bg=DARK_PANEL,
                           activeforeground=BG, activebackground=color,
-                          font=(FONT_MONO,12), relief="flat", bd=0,
+                          font=(FONT_MONO,14), relief="flat", bd=0,
                           width=3, cursor="hand2",
                           highlightthickness=1, highlightbackground=color)
             b.bind("<Enter>", lambda e,b=b,c=color: b.config(bg=c,fg=BG))
             b.bind("<Leave>", lambda e,b=b,c=color: b.config(bg=DARK_PANEL,fg=c))
             b.pack(side="left", padx=3)
-            if sym == "▶":
+            if sym == "":
                 self._play_btn = b
 
         # Volume
         tk.Label(ctrl, text="  VOL:", fg=TEXT_DIM, bg=BG,
-                 font=(FONT_MONO,7)).pack(side="left", padx=(12,0))
+                 font=(FONT_MONO,11)).pack(side="left", padx=(12,0))
         sty2 = self._make_scale_style("Vol.Horizontal.TScale", ORANGE)
         vol_bar = ttk.Scale(ctrl, from_=0, to=100,
                              orient="horizontal",
@@ -282,7 +282,7 @@ class PlayerPanel(tk.Frame):
         vol_bar.pack(side="left", fill="x", expand=True, padx=6)
         self._vol_var.set(80)
         self.vol_lbl = tk.Label(ctrl, text="80%", fg=ORANGE, bg=BG,
-                                 font=(FONT_MONO,7), width=4)
+                                 font=(FONT_MONO,11), width=4)
         self.vol_lbl.pack(side="left")
 
         # Playlist
@@ -293,8 +293,8 @@ class PlayerPanel(tk.Frame):
 
         pl_hdr = tk.Frame(pl_inner, bg=DARK_PANEL)
         pl_hdr.pack(fill="x", padx=6, pady=(4,2))
-        tk.Label(pl_hdr, text="▸ PLAYLIST", fg=CYAN_DIM, bg=DARK_PANEL,
-                 font=(FONT_MONO,8)).pack(side="left")
+        tk.Label(pl_hdr, text=" PLAYLIST", fg=CYAN_DIM, bg=DARK_PANEL,
+                 font=(FONT_MONO,10)).pack(side="left")
 
         for lbl, cmd, col in [
             ("[ + FOLDER ]", self._open_folder, CYAN),
@@ -304,7 +304,7 @@ class PlayerPanel(tk.Frame):
             b = tk.Button(pl_hdr, text=lbl, command=cmd,
                           fg=col, bg=DARK_PANEL,
                           activeforeground=BG, activebackground=col,
-                          font=(FONT_MONO,7,"bold"), relief="flat", bd=0,
+                          font=(FONT_MONO,11,"bold"), relief="flat", bd=0,
                           cursor="hand2", highlightthickness=1,
                           highlightbackground=col)
             b.bind("<Enter>", lambda e,b=b,c=col: b.config(bg=c,fg=BG))
@@ -316,7 +316,7 @@ class PlayerPanel(tk.Frame):
         self.pl_listbox = tk.Listbox(pl_list_frame,
             bg="#0a1a1a", fg=CYAN_DIM,
             selectbackground="#0a3333", selectforeground=CYAN,
-            font=(FONT_MONO,8), relief="flat", bd=0,
+            font=(FONT_MONO,10), relief="flat", bd=0,
             highlightthickness=0, activestyle="none",
             height=7)
         pl_sb = tk.Scrollbar(pl_list_frame, orient="vertical",
@@ -326,7 +326,7 @@ class PlayerPanel(tk.Frame):
         self.pl_listbox.pack(fill="both", expand=True)
         self.pl_listbox.bind("<Double-Button-1>", self._on_pl_double_click)
 
-    # ── Scale style helper ────────────────────────────────────────────────────
+    #  Scale style helper 
     def _make_scale_style(self, name: str, color: str):
         from tkinter import ttk
         sty = ttk.Style()
@@ -334,12 +334,16 @@ class PlayerPanel(tk.Frame):
                       sliderthickness=12, sliderrelief="flat")
         return name
 
-    # ── Waveform ──────────────────────────────────────────────────────────────
+    #  Waveform 
     def _init_waveform(self, n_bars=48):
         self._waveform_anim   = [0.05] * n_bars
         self._waveform_target = [0.05] * n_bars
 
     def _animate_wave(self):
+        # Fix #3: Skip rendering when player tab is not visible
+        if not self.winfo_ismapped():
+            self._wave_id = self.after(200, self._animate_wave)
+            return
         self.wave_canvas.delete("wave")
         w = self.wave_canvas.winfo_width() or 600
         h = 80
@@ -387,27 +391,27 @@ class PlayerPanel(tk.Frame):
 
         self._wave_id = self.after(50, self._animate_wave)
 
-    # ── Playback controls ─────────────────────────────────────────────────────
+    #  Playback controls 
     def _play_pause(self):
         if not self._pygame_ok:
             return
         if self._player.is_playing():
             self._player.pause()
-            self._play_btn.config(text="▶")
+            self._play_btn.config(text="")
         elif self._player.is_paused():
             self._player.play()
-            self._play_btn.config(text="⏸")
+            self._play_btn.config(text="")
         else:
             if self._pl_index < 0 and self._playlist:
                 self._load_index(0)
             elif self._pl_index >= 0:
                 self._player.play()
-                self._play_btn.config(text="⏸")
+                self._play_btn.config(text="")
 
     def _stop(self):
         if not self._pygame_ok: return
         self._player.stop()
-        self._play_btn.config(text="▶")
+        self._play_btn.config(text="")
         self._pos_var.set(0)
         self.time_cur.config(text="0:00")
 
@@ -433,7 +437,7 @@ class PlayerPanel(tk.Frame):
         if self._player.load(path):
             self._player.set_volume(self._vol)
             self._player.play()
-            self._play_btn.config(text="⏸")
+            self._play_btn.config(text="")
             name = os.path.splitext(os.path.basename(path))[0]
             self._playing_title.set(name)
             # Try metadata
@@ -459,7 +463,7 @@ class PlayerPanel(tk.Frame):
                 val = audio.get(key)
                 if val:
                     parts.append(str(val[0]))
-            return "  ·  ".join(parts)
+            return "  *  ".join(parts)
         except Exception:
             return ""
 
@@ -484,7 +488,7 @@ class PlayerPanel(tk.Frame):
         if self._pygame_ok:
             self._player.set_volume(v)
 
-    # ── Playlist management ───────────────────────────────────────────────────
+    #  Playlist management 
     def _open_folder(self):
         folder = filedialog.askdirectory(title="Open Audio Folder")
         if folder:
@@ -540,7 +544,7 @@ class PlayerPanel(tk.Frame):
         self.time_tot.config(text="0:00")
         self._pos_var.set(0)
         if self._play_btn:
-            self._play_btn.config(text="▶")
+            self._play_btn.config(text="")
 
     def _refresh_listbox(self):
         self.pl_listbox.delete(0, "end")
@@ -553,7 +557,7 @@ class PlayerPanel(tk.Frame):
         if sel:
             self._load_index(sel[0])
 
-    # ── Poll (update seek bar while playing) ──────────────────────────────────
+    #  Poll (update seek bar while playing) 
     def _start_poll(self):
         self._poll()
 

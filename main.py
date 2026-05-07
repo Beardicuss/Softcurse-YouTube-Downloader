@@ -1,5 +1,5 @@
 """
-main.py - Softcurse // YouTube Downloader v3
+main.py - Softcurse // Media Downloader v1.0
 Entry point
 """
 import sys

@@ -75,7 +75,7 @@ def send_notification(title: str, message: str, app_name: str = "Softcurse"):
 def _make_icon_image(size=64):
     """Generate a simple cyan 'SC' icon image for the tray."""
     try:
-        from PIL import Image, ImageDraw, ImageFont
+        from PIL import Image, ImageDraw
         img = Image.new("RGBA", (size, size), (2, 2, 2, 255))
         draw = ImageDraw.Draw(img)
         # Cyan border
@@ -111,7 +111,7 @@ class TrayManager:
             self._icon = pystray.Icon(
                 "softcurse",
                 img,
-                "Softcurse // YouTube Downloader",
+                "Softcurse // Media Downloader",
                 menu
             )
             self._running = True

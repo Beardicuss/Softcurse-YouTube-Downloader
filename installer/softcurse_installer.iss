@@ -1,20 +1,20 @@
 ; ─────────────────────────────────────────────────────────────────────────────
-; Softcurse // YouTube Downloader v4 — Inno Setup Installer Script
+; Softcurse // Media Downloader v1.0 — Inno Setup Installer Script
 ; Requires: Inno Setup 6+ (https://jrsoftware.org/isinfo.php)
 ;
 ; HOW TO BUILD:
 ;   1. Install Inno Setup 6 from https://jrsoftware.org/isdl.php
-;   2. Place your built Softcurse_YT_Downloader.exe in the dist\ folder
+;   2. Place your built Softcurse_Media_Downloader.exe in the dist\ folder
 ;      (run build_exe.bat first with PyInstaller)
 ;   3. Open this file in Inno Setup IDE and click Compile (Ctrl+F9)
-;   4. Output: installer\Output\Softcurse_YT_Downloader_Setup.exe
+;   4. Output: installer\Output\Softcurse_Media_Downloader_v1_Setup.exe
 ; ─────────────────────────────────────────────────────────────────────────────
 
-#define AppName      "Softcurse YT Downloader"
-#define AppVersion   "4.1"
+#define AppName      "Softcurse Media Downloader"
+#define AppVersion   "1.0"
 #define AppPublisher "Softcurse"
 #define AppURL       "https://softcurse.dev"
-#define AppExeName   "Softcurse_YT_Downloader.exe"
+#define AppExeName   "Softcurse_Media_Downloader.exe"
 #define AppIcon      "..\assets\yt.ico"
 
 [Setup]
@@ -30,7 +30,7 @@ DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 AllowNoIcons=yes
 OutputDir=Output
-OutputBaseFilename=Softcurse_YT_Downloader_v4_Setup
+OutputBaseFilename=Softcurse_Media_Downloader_v1.0_Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -95,7 +95,7 @@ var
   Lbl: TLabel;
   Memo: TMemo;
 begin
-  FeaturePage := CreateCustomPage(wpWelcome, 'Softcurse YT Downloader v4',
+  FeaturePage := CreateCustomPage(wpWelcome, 'Softcurse Media Downloader v1.0',
     'What''s included in this release:');
 
   Lbl := TLabel.Create(FeaturePage);
@@ -147,7 +147,7 @@ begin
   Result := True;
   if not IsWin64 then
   begin
-    MsgBox('Softcurse YT Downloader requires a 64-bit version of Windows 10 or later.',
+    MsgBox('Softcurse Media Downloader requires a 64-bit version of Windows 10 or later.',
       mbError, MB_OK);
     Result := False;
   end;

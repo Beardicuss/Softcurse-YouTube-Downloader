@@ -11,16 +11,16 @@
 ```
 build_exe.bat
 ```
-This creates `dist/Softcurse_YT_Downloader.exe` using PyInstaller.
+This creates `dist/Softcurse_Media_Downloader.exe` using PyInstaller.
 
 ### Step 2 — Build the installer
 Open Inno Setup Compiler and:
 - File → Open → select `installer/softcurse_installer.iss`
 - Press **Ctrl+F9** (Build) or click the green play button
-- Output: `installer/Output/Softcurse_YT_Downloader_v4_Setup.exe`
+- Output: `installer/Output/Softcurse_Media_Downloader_v1.0_Setup.exe`
 
 ### What the installer does
-- Installs `Softcurse_YT_Downloader.exe` to `Program Files` (or user folder)
+- Installs `Softcurse_Media_Downloader.exe` to `Program Files` (or user folder)
 - Optionally bundles `ffmpeg.exe` if present in `./ffmpeg/`
 - Creates Start Menu shortcut
 - Optional: Desktop shortcut, startup entry
@@ -29,7 +29,7 @@ Open Inno Setup Compiler and:
 - Offers to launch app after install
 
 ## Distribution
-The resulting `Softcurse_YT_Downloader_v4_Setup.exe` is:
+The resulting `Softcurse_Media_Downloader_v1.0_Setup.exe` is:
 - A single self-contained installer (~15–30 MB with ffmpeg)
 - No Python required on end-user machine
 - Works on Windows 10/11 64-bit

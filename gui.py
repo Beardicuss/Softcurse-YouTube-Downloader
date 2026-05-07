@@ -1,5 +1,5 @@
 """
-gui.py - Softcurse // YouTube Downloader v4
+gui.py - Softcurse // Media Downloader v1.0
 Redesigned UI: cleaner card layout, glowing accents, friendly sci-fi aesthetic
 """
 import tkinter as tk
@@ -15,40 +15,40 @@ from metadata_editor import MetadataEditorDialog, check_mutagen, install_mutagen
 from player import PlayerPanel, check_pygame, install_pygame
 from sponsorblock import CATEGORY_LABELS, DEFAULT_CATEGORIES
 
-# ── Palette ───────────────────────────────────────────────────────────────────
-BG          = "#050d12"       # very dark navy
-CARD        = "#0a1825"       # card background
-CARD_BORDER = "#0d2235"       # card border / subtle
-PANEL       = "#071520"       # inner panel background
+#  Palette  SOFTCURSE/SYS Design System 
+BG          = "#020202"       # Void Black  absolute dark base canvas
+CARD        = "#050810"       # Abyss Glass  card/panel surface
+CARD_BORDER = "#001f1f"       # Ghost cyan border
+PANEL       = "#050810"       # Panel surface (same as CARD for consistency)
 
-CYAN        = "#00e5ff"       # primary accent
-CYAN_DIM    = "#007fa8"
-CYAN_DARK   = "#002a38"
-CYAN_GLOW   = "#00c8e0"
+CYAN        = "#00ffff"       # Primary Accent  borders, highlights, glow
+CYAN_DIM    = "#007373"       # Dim Aqua  labels, metadata
+CYAN_DARK   = "#001a1a"       # Deep teal for backgrounds
+CYAN_GLOW   = "#00ffc8"       # Cyan Soft  active glow states
 
-BLUE        = "#1a8cff"
-BLUE_DIM    = "#0a4a8a"
+BLUE        = "#0088ff"       # Neon Blue  network, links, secondary
+BLUE_DIM    = "#004488"
 
-MAGENTA     = "#e040fb"
-MAGENTA_DIM = "#7b1fa2"
-MAGENTA_GLOW= "#c520e0"
+MAGENTA     = "#ff00ff"       # Glitch/Alert  error, glitch FX, critical
+MAGENTA_DIM = "#660066"
+MAGENTA_GLOW= "#cc00cc"
 
-WHITE       = "#d0eef8"
-TEXT_MED    = "#5a9ab8"
-TEXT_DIM    = "#2a5a70"
+WHITE       = "#e8f4f8"       # Ice White  primary text
+TEXT_MED    = "#007373"        # Dim Aqua  secondary text
+TEXT_DIM    = "#004a4a"        # Deeper dim  tertiary labels
 
 SUCCESS     = "#00e676"
-SUCCESS_DIM = "#005533"
-WARNING     = "#ffab40"
+SUCCESS_DIM = "#003a1e"
+WARNING     = "#ff6b35"        # Electric Orange doubles as warning
 ERROR       = "#ff5252"
 
-ORANGE      = "#ff9100"
-ORANGE_DIM  = "#6a3a00"
+ORANGE      = "#ff6b35"       # Electric Orange  CTAs, live data, active
+ORANGE_DIM  = "#4a2010"
 
-ACCENT_LINE = "#0d3a4f"       # horizontal rule / divider color
+ACCENT_LINE = "#001f1f"       # Ghost cyan 0.12  dividers & grid lines
 
-FONT_MONO   = "Courier New"
-FONT_UI     = "Courier New"
+FONT_MONO   = "Consolas"
+FONT_UI     = "Consolas"
 
 TAB_DL=0; TAB_PLAYER=1; TAB_HISTORY=2; TAB_SETTINGS=3
 
@@ -60,6 +60,7 @@ class SoftcurseApp:
         self.dl   = Downloader()
         self._downloading   = False
         self._mode          = tk.StringVar(value="mp3")
+        self._platform      = tk.StringVar(value="youtube")
         self._active_tab    = TAB_DL
         self._thumb_photo   = None
         self._pending_info  = None
@@ -67,6 +68,10 @@ class SoftcurseApp:
         self._crt_after     = None
         self._glitch_after  = None
         self._pulse_after   = None
+        self._resize_after  = None
+        self._scanline_ids  = []
+        self._glitch_line_id= None
+        self._color_cache   = {}
         self._tray          = None
         self._dl_metadata   = {}
         self._dl_url = self._dl_mode = self._dl_folder = ""
@@ -78,23 +83,26 @@ class SoftcurseApp:
         self._maybe_start_tray()
 
     def _setup_window(self):
-        self.root.title("Softcurse // YouTube Downloader v4")
+        self.root.title("Softcurse // Media Downloader v1.0")
         self.root.geometry("860x840")
         self.root.minsize(760, 700)
         self.root.configure(bg=BG)
         self.root.resizable(True, True)
 
-        def disable_maximize():
+        def remove_maximize():
             try:
                 import ctypes
                 GWL_STYLE = -16
                 WS_MAXIMIZEBOX = 0x00010000
-                hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
+                SWP_FLAGS = 0x0027  # FRAMECHANGED|NOMOVE|NOSIZE|NOZORDER
+                # Use wm_frame() for reliable HWND on modern Windows
+                hwnd = int(self.root.wm_frame(), 16)
                 style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_STYLE)
                 ctypes.windll.user32.SetWindowLongW(hwnd, GWL_STYLE, style & ~WS_MAXIMIZEBOX)
+                ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_FLAGS)
             except Exception:
                 pass
-        self.root.after(10, disable_maximize)
+        self.root.after(100, remove_maximize)
         try: self.root.iconbitmap("assets/yt.ico")
         except: pass
         self.root.update_idletasks()
@@ -103,13 +111,15 @@ class SoftcurseApp:
         self.root.geometry(f"860x840+{x}+{y}")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
-    # ── Layout ────────────────────────────────────────────────────────────────
+    #  Layout 
     def _build_ui(self):
         # Background layer: subtle dot grid
         self.bg_canvas = tk.Canvas(self.root, bg=BG, highlightthickness=0)
         self.bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
         self._draw_bg()
         self.crt_canvas = self.bg_canvas
+        # Bind Configure ONCE with debounce (Fix #1)
+        self.root.bind("<Configure>", self._on_resize)
 
         # Main scrollable container
         outer = tk.Frame(self.root, bg=BG)
@@ -120,7 +130,7 @@ class SoftcurseApp:
                                         command=self.main_canvas.yview)
         self.main_canvas.configure(yscrollcommand=self.main_scroll.set)
 
-        # Don't show scrollbar unless needed — always use the canvas
+        # Don't show scrollbar unless needed  always use the canvas
         self.main_canvas.pack(side="left", fill="both", expand=True)
 
         self.main_frame = tk.Frame(self.main_canvas, bg=BG)
@@ -148,29 +158,52 @@ class SoftcurseApp:
     def _on_mousewheel(self, e):
         self.main_canvas.yview_scroll(int(-1*(e.delta/120)), "units")
 
+    def _on_resize(self, event=None):
+        """Debounced resize handler — redraws bg + rebuilds CRT scanlines."""
+        if self._resize_after:
+            self.root.after_cancel(self._resize_after)
+        self._resize_after = self.root.after(100, self._do_resize)
+
+    def _do_resize(self):
+        self._draw_bg()
+        if self.cfg.get("crt_effects", True):
+            self._build_crt_scanlines()
+
     def _draw_bg(self):
         self.bg_canvas.delete("bg")
         w = self.root.winfo_width()  or 860
         h = self.root.winfo_height() or 840
-        # Subtle dot grid
-        for x in range(0, w, 32):
-            for y in range(0, h, 32):
-                self.bg_canvas.create_oval(x-1, y-1, x+1, y+1,
-                    fill=ACCENT_LINE, outline="", tags="bg")
-        # Horizontal glow bands
-        for i, alpha in enumerate([0.6, 0.4, 0.25, 0.15]):
-            yy = h // 2 + i * 4
-            shade = self._blend_color(BG, CYAN_DARK, alpha)
-            self.bg_canvas.create_line(0, yy, w, yy, fill=shade, width=2, tags="bg")
-        self.root.bind("<Configure>", lambda e: self._draw_bg())
+        # Cyan line grid  40px spacing, ghost opacity
+        grid_color = "#041414"  # rgba(0,255,255,0.03) on #020202
+        for x in range(0, w, 40):
+            self.bg_canvas.create_line(x, 0, x, h,
+                fill=grid_color, width=1, tags="bg")
+        for y in range(0, h, 40):
+            self.bg_canvas.create_line(0, y, w, y,
+                fill=grid_color, width=1, tags="bg")
+        # Ambient glow bloom  subtle radial at center
+        cx, cy = w // 2, h // 3
+        for r, alpha in [(200, 0.08), (350, 0.04), (500, 0.02)]:
+            shade = self._blend_color(BG, "#00ffc8", alpha)
+            self.bg_canvas.create_oval(
+                cx - r, cy - r, cx + r, cy + r,
+                fill=shade, outline="", tags="bg")
+        # Fix #1: No re-bind here — bound once in _build_ui
 
     def _blend_color(self, c1, c2, t):
+        # Fix #6: Cache parsed colors
+        key = (c1, c2, t)
+        cached = self._color_cache.get(key)
+        if cached:
+            return cached
         r1,g1,b1 = int(c1[1:3],16),int(c1[3:5],16),int(c1[5:7],16)
         r2,g2,b2 = int(c2[1:3],16),int(c2[3:5],16),int(c2[5:7],16)
-        return "#{:02x}{:02x}{:02x}".format(
+        result = "#{:02x}{:02x}{:02x}".format(
             int(r1+(r2-r1)*t), int(g1+(g2-g1)*t), int(b1+(b2-b1)*t))
+        self._color_cache[key] = result
+        return result
 
-    # ── Widget helpers ────────────────────────────────────────────────────────
+    #  Widget helpers 
     def _card(self, parent, color=CYAN, pad=12, title=None, title_color=None):
         """Returns (outer_frame, inner_frame). Draws a styled card with glow border."""
         tc = title_color or color
@@ -185,7 +218,7 @@ class SoftcurseApp:
             # Left accent line
             tk.Frame(hdr, bg=tc, width=3).pack(side="left", fill="y", padx=(0,10))
             tk.Label(hdr, text=title.upper(), fg=tc, bg=CARD,
-                     font=(FONT_MONO, 8, "bold")).pack(side="left", pady=8)
+                     font=(FONT_MONO, 10, "bold")).pack(side="left", pady=8)
             # Separator
             sep = tk.Frame(inner_wrap, bg=ACCENT_LINE, height=1)
             sep.pack(fill="x")
@@ -213,7 +246,7 @@ class SoftcurseApp:
         b = tk.Button(container, text=text, command=cmd,
                       fg=color, bg=PANEL,
                       activeforeground=BG, activebackground=color,
-                      font=(FONT_MONO, 11, "bold"), relief="flat", bd=0,
+                      font=(FONT_MONO, 13, "bold"), relief="flat", bd=0,
                       width=w, height=h, cursor="hand2")
         b.pack(fill="both", expand=True)
         b.bind("<Enter>", lambda e: b.config(bg=color, fg=BG))
@@ -221,7 +254,7 @@ class SoftcurseApp:
         return container, b
 
     def _entry(self, p, var, width=None):
-        kw = dict(font=(FONT_MONO, 9), fg=WHITE, bg=PANEL,
+        kw = dict(font=(FONT_MONO, 11), fg=WHITE, bg=PANEL,
                   insertbackground=CYAN, relief="flat", bd=6,
                   highlightthickness=1, highlightbackground=CYAN_DIM,
                   highlightcolor=CYAN)
@@ -234,7 +267,7 @@ class SoftcurseApp:
     def _sep(self, parent, color=ACCENT_LINE):
         tk.Frame(parent, bg=color, height=1).pack(fill="x", pady=6)
 
-    # ── Header ────────────────────────────────────────────────────────────────
+    #  Header 
     def _build_header(self):
         f = tk.Frame(self.main_frame, bg=BG)
         f.pack(fill="x", padx=20, pady=(18, 8))
@@ -244,27 +277,27 @@ class SoftcurseApp:
 
         # Decorative corner brackets
         self._corner_tl = self.title_canvas.create_text(20, 12,
-            text="◈", font=(FONT_MONO, 10, "bold"), fill=MAGENTA, anchor="w")
+            text="<>", font=(FONT_MONO, 10, "bold"), fill=MAGENTA, anchor="w")
         self._corner_tr = self.title_canvas.create_text(820, 12,
-            text="◈", font=(FONT_MONO, 10, "bold"), fill=MAGENTA, anchor="e")
+            text="<>", font=(FONT_MONO, 10, "bold"), fill=MAGENTA, anchor="e")
 
         # Sub-label
         self.t_sub = self.title_canvas.create_text(420, 14,
             text="S  O  F  T  C  U  R  S  E",
-            font=(FONT_MONO, 7, "bold"), fill=MAGENTA_DIM, anchor="center")
+            font=(FONT_MONO, 13, "bold"), fill=MAGENTA_DIM, anchor="center")
 
         # Shadow + main title
         self.title_shadow = self.title_canvas.create_text(422, 44,
-            text="[ YT DOWNLOADER // SOFTCURSE ]",
-            font=(FONT_MONO, 19, "bold"), fill=MAGENTA_DIM, anchor="center")
+            text="[ MEDIA DOWNLOADER // SOFTCURSE ]",
+            font=(FONT_MONO, 20, "bold"), fill=MAGENTA_DIM, anchor="center")
         self.title_id = self.title_canvas.create_text(420, 42,
-            text="[ YT DOWNLOADER // SOFTCURSE ]",
-            font=(FONT_MONO, 19, "bold"), fill=CYAN, anchor="center")
+            text="[ MEDIA DOWNLOADER // SOFTCURSE ]",
+            font=(FONT_MONO, 20, "bold"), fill=CYAN, anchor="center")
 
         # Feature tags row
         self.t4 = self.title_canvas.create_text(420, 66,
-            text="MP3  ·  FLAC  ·  WAV  ·  MP4  ·  PLAYER  ·  SPONSORBLOCK  ·  METADATA",
-            font=(FONT_MONO, 7), fill=TEXT_MED, anchor="center")
+            text="YOUTUBE  |  INSTAGRAM  |  TIKTOK  |  X  //  MP3  |  FLAC  |  WAV  |  MP4",
+            font=(FONT_MONO, 9), fill=TEXT_MED, anchor="center")
 
         self.title_canvas.bind("<Configure>", lambda e: self._center_header(e.width))
 
@@ -276,7 +309,7 @@ class SoftcurseApp:
         self.title_canvas.coords(self.title_id, cx, 42)
         self.title_canvas.coords(self.t4, cx, 66)
 
-    # ── Nav tabs ──────────────────────────────────────────────────────────────
+    #  Nav tabs 
     def _build_nav_tabs(self):
         nav_outer = tk.Frame(self.main_frame, bg=CARD, padx=1, pady=1)
         nav_outer.pack(fill="x", padx=20, pady=(0, 14))
@@ -289,20 +322,20 @@ class SoftcurseApp:
 
         self._tab_btns = {}
         for label, idx, color in [
-            ("⬇  DOWNLOAD", TAB_DL,       CYAN),
-            ("♪  PLAYER",   TAB_PLAYER,    MAGENTA),
-            ("📋  HISTORY",  TAB_HISTORY,   BLUE),
-            ("⚙  SETTINGS", TAB_SETTINGS,  ORANGE),
+            (">> DOWNLOAD", TAB_DL,       CYAN),
+            ("*  PLAYER",   TAB_PLAYER,    MAGENTA),
+            ("#  HISTORY",  TAB_HISTORY,   BLUE),
+            ("@  SETTINGS", TAB_SETTINGS,  ORANGE),
         ]:
             b = tk.Button(btn_row, text=label,
                           command=lambda i=idx: self._show_tab(i),
-                          font=(FONT_MONO, 9, "bold"), relief="flat", bd=0,
+                          font=(FONT_MONO, 13, "bold"), relief="flat", bd=0,
                           padx=18, pady=10, cursor="hand2")
             b.pack(side="left")
             self._tab_btns[idx] = (b, color)
 
         self._tab_ind = tk.Label(nav_inner, text="", fg=TEXT_DIM, bg=CARD,
-                                  font=(FONT_MONO, 7))
+                                  font=(FONT_MONO, 11))
         self._tab_ind.pack(pady=(0, 4))
 
     def _show_tab(self, idx):
@@ -325,9 +358,9 @@ class SoftcurseApp:
         if idx == TAB_HISTORY:
             self._refresh_history()
 
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     # DOWNLOAD TAB
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     def _build_tab_download(self):
         self.tab_dl = tk.Frame(self.main_frame, bg=BG)
         self._build_format_tabs(self.tab_dl)
@@ -339,41 +372,98 @@ class SoftcurseApp:
         self._build_progress_section(self.tab_dl)
         self._build_log_section(self.tab_dl)
 
-    # ── Format selector ───────────────────────────────────────────────────────
+    #  Platform + Format selector (two-tier) 
     def _build_format_tabs(self, parent):
         f = tk.Frame(parent, bg=BG)
         f.pack(fill="x", pady=(0, 8))
-        row = tk.Frame(f, bg=BG)
-        row.pack(anchor="center")
+
+        #  Row 1: Platform selector 
+        plat_lbl = tk.Label(f, text="> PLATFORM", fg=TEXT_DIM, bg=BG,
+                            font=(FONT_MONO, 9))
+        plat_lbl.pack(anchor="center", pady=(0, 4))
+        plat_row = tk.Frame(f, bg=BG)
+        plat_row.pack(anchor="center")
+        self._plat_btns = {}
+        platforms = [
+            ("YOUTUBE",   "youtube",   CYAN),
+            ("INSTAGRAM", "instagram", ORANGE),
+            ("TIKTOK",    "tiktok",    MAGENTA),
+            ("X",         "x",         WHITE),
+        ]
+        for label, plat, color in platforms:
+            wrap = tk.Frame(plat_row, bg=color, padx=1, pady=1)
+            wrap.pack(side="left", padx=4)
+            b = tk.Button(wrap, text=f"  {label}  ",
+                          command=lambda p=plat: self._set_platform(p),
+                          font=(FONT_MONO, 13, "bold"), relief="flat", bd=0,
+                          cursor="hand2", padx=10, pady=6)
+            b.pack()
+            self._plat_btns[plat] = (wrap, b, color)
+
+        #  Row 2: Format selector (hidden until platform chosen) 
+        self._fmt_lbl = tk.Label(f, text="> FORMAT", fg=TEXT_DIM, bg=BG,
+                           font=(FONT_MONO, 9))
+        self._fmt_row = tk.Frame(f, bg=BG)
         self._fmt_btns = {}
         formats = [
-            ("⬇  MP3",   "mp3",  CYAN),
-            ("◆  FLAC",  "flac", SUCCESS),
-            ("◇  WAV",   "wav",  BLUE),
-            ("▶  MP4",   "mp4",  ORANGE),
+            (">>  MP3",   "mp3",  CYAN),
+            ("**  FLAC",  "flac", SUCCESS),
+            ("<>  WAV",   "wav",  BLUE),
+            ("|>  MP4",   "mp4",  ORANGE),
         ]
         for label, mode, color in formats:
-            wrap = tk.Frame(row, bg=color, padx=1, pady=1)
+            wrap = tk.Frame(self._fmt_row, bg=color, padx=1, pady=1)
             wrap.pack(side="left", padx=4)
             b = tk.Button(wrap, text=f"  {label}  ",
                           command=lambda m=mode: self._set_mode(m),
-                          font=(FONT_MONO, 9, "bold"), relief="flat", bd=0,
+                          font=(FONT_MONO, 13, "bold"), relief="flat", bd=0,
                           cursor="hand2", padx=10, pady=6)
             b.pack()
             self._fmt_btns[mode] = (wrap, b, color)
+
         self.mode_lbl = tk.Label(f, text="", fg=CYAN_DIM, bg=BG,
-                                  font=(FONT_MONO, 7))
-        self.mode_lbl.pack(pady=(6, 0))
-        self._set_mode("mp3")
+                                  font=(FONT_MONO, 11))
+        # Keep format row hidden  revealed on first platform click
+        self._fmt_visible = False
+
+    def _set_platform(self, plat: str):
+        self._platform.set(plat)
+        plat_colors = {"youtube": CYAN, "instagram": ORANGE,
+                       "tiktok": MAGENTA, "x": WHITE}
+        for p, (wrap, b, c) in self._plat_btns.items():
+            if p == plat:
+                b.config(fg=BG, bg=c)
+                wrap.config(bg=c)
+            else:
+                b.config(fg=TEXT_MED, bg=CARD)
+                wrap.config(bg=ACCENT_LINE)
+        # Reveal format row on first platform click
+        if not self._fmt_visible:
+            self._fmt_visible = True
+            self._fmt_lbl.pack(anchor="center", pady=(10, 4))
+            self._fmt_row.pack(anchor="center")
+            self.mode_lbl.pack(pady=(6, 0))
+            self._set_mode("mp3")
+        # SponsorBlock is YouTube-only
+        try:
+            if hasattr(self, "sb_outer"):
+                is_yt = (plat == "youtube")
+                is_audio = self._mode.get() in ("mp3", "flac", "wav")
+                if is_yt and is_audio:
+                    self.sb_outer.pack(fill="x", pady=(0, 8), before=self.clip_outer)
+                else:
+                    self.sb_outer.pack_forget()
+        except Exception:
+            pass
 
     def _set_mode(self, mode: str):
         self._mode.set(mode)
         colors = {"mp3": CYAN, "flac": SUCCESS, "wav": BLUE, "mp4": ORANGE}
         labels = {
-            "mp3":  "MODE: MP3 — Lossy audio, universal compatibility",
-            "flac": "MODE: FLAC — Lossless audio, audiophile quality",
-            "wav":  "MODE: WAV — Uncompressed audio, studio / DAW ready",
-            "mp4":  "MODE: MP4 — Video with audio",
+            "mp3":  "MODE: MP3 -- Lossy audio, universal compatibility",
+            "flac": "MODE: FLAC -- Lossless audio, audiophile quality",
+            "wav":  "MODE: WAV -- Uncompressed audio, studio / DAW ready",
+            "mp4":  "MODE: MP4 -- Video with audio",
         }
         for m, (wrap, b, c) in self._fmt_btns.items():
             if m == mode:
@@ -395,7 +485,8 @@ class SoftcurseApp:
                 self.audio_q_frame.pack_forget()
                 self.mp4_q_frame.pack(side="left")
             if hasattr(self, "sb_outer"):
-                if is_audio:
+                is_yt = self._platform.get() == "youtube"
+                if is_audio and is_yt:
                     self.sb_outer.pack(fill="x", pady=(0, 8), before=self.clip_outer)
                 else:
                     self.sb_outer.pack_forget()
@@ -403,7 +494,7 @@ class SoftcurseApp:
                 self.folder_var.set(self.cfg.get("mp4_output_folder", ""))
             else:
                 self.folder_var.set(self.cfg.get("output_folder", ""))
-            icon  = {"mp3": "⬇", "flac": "◆", "wav": "◇", "mp4": "▶"}.get(mode, "⬇")
+            icon  = {"mp3": ">>", "flac": "**", "wav": "<>", "mp4": "|>"}.get(mode, ">>")
             c     = colors.get(mode, CYAN)
             self.dl_btn_inner.config(
                 text=f"  {icon}  DOWNLOAD {mode.upper()}  ",
@@ -412,9 +503,9 @@ class SoftcurseApp:
         except AttributeError:
             pass
 
-    # ── URL ───────────────────────────────────────────────────────────────────
+    #  URL 
     def _build_url_section(self, parent):
-        o, i = self._card(parent, CYAN, pad=12, title="▸ Target URL")
+        o, i = self._card(parent, CYAN, pad=12, title="> Target URL")
         o.pack(fill="x", pady=(0, 8))
         row = tk.Frame(i, bg=CARD); row.pack(fill="x", pady=(4, 0))
         self.url_var = tk.StringVar(value=self.cfg.get("last_url", ""))
@@ -425,11 +516,11 @@ class SoftcurseApp:
         self._btn(row, "PASTE",  self._paste_url, CYAN,    7).pack(side="left", padx=(8, 0))
         self._btn(row, "CLR",    lambda: (self.url_var.set(""), self._clear_preview()),
                   TEXT_DIM, 5).pack(side="left", padx=(4, 0))
-        self._btn(row, "↺ FETCH", self._trigger_fetch, BLUE, 8).pack(side="left", padx=(4, 0))
+        self._btn(row, "FETCH", self._trigger_fetch, BLUE, 8).pack(side="left", padx=(4, 0))
 
-    # ── Thumbnail ─────────────────────────────────────────────────────────────
+    #  Thumbnail 
     def _build_thumb_section(self, parent):
-        o, i = self._card(parent, CYAN_DIM, pad=10, title="▸ Preview")
+        o, i = self._card(parent, CYAN_DIM, pad=10, title="> Preview")
         o.pack(fill="x", pady=(0, 8))
         row = tk.Frame(i, bg=CARD); row.pack(fill="x")
 
@@ -440,20 +531,20 @@ class SoftcurseApp:
             bg=PANEL, highlightthickness=0)
         self.thumb_canvas.pack()
         self.thumb_canvas.create_text(84, 48, text="NO PREVIEW", fill=TEXT_DIM,
-                                      font=(FONT_MONO, 8))
+                                      font=(FONT_MONO, 10))
 
         col = tk.Frame(row, bg=CARD); col.pack(side="left", fill="both", expand=True)
         self.info_title = tk.Label(col, text="// PASTE A URL TO PREVIEW //",
-            fg=TEXT_MED, bg=CARD, font=(FONT_MONO, 9, "bold"),
+            fg=TEXT_MED, bg=CARD, font=(FONT_MONO, 13, "bold"),
             wraplength=420, justify="left", anchor="w")
         self.info_title.pack(anchor="w")
         self.info_meta = tk.Label(col, text="", fg=BLUE, bg=CARD,
-            font=(FONT_MONO, 8), justify="left", anchor="w")
+            font=(FONT_MONO, 10), justify="left", anchor="w")
         self.info_meta.pack(anchor="w", pady=(6, 0))
         self.info_status = tk.Label(col, text="", fg=CYAN_DIM, bg=CARD,
-            font=(FONT_MONO, 7), justify="left", anchor="w")
+            font=(FONT_MONO, 11), justify="left", anchor="w")
         self.info_status.pack(anchor="w", pady=(2, 0))
-        self.meta_btn = self._btn(col, "[ ✎ EDIT METADATA ]",
+        self.meta_btn = self._btn(col, "[ EDIT METADATA ]",
                                   self._open_metadata_editor,
                                   MAGENTA_DIM, 20, 1, CARD, 8)
         self.meta_btn.pack(anchor="w", pady=(8, 0))
@@ -465,12 +556,12 @@ class SoftcurseApp:
         if url == self._info_fetch_url: return
         self._info_fetch_url = url
         self._clear_preview(keep_url=True)
-        self.info_status.config(text="⟳ Fetching...", fg=WARNING)
+        self.info_status.config(text="~ Fetching...", fg=WARNING)
         fetch_info_and_thumb(url,
             on_info=lambda d: self.root.after(0, lambda: self._on_info(d)),
             on_thumb=lambda p: self.root.after(0, lambda: self._on_thumb(p)),
             on_error=lambda e: self.root.after(0, lambda: self.info_status.config(
-                text=f"⚠ {e[:60]}", fg=WARNING)),
+                text=f" {e[:60]}", fg=WARNING)),
             thumb_size=(164, 94))
 
     def _on_info(self, d):
@@ -478,17 +569,17 @@ class SoftcurseApp:
         title = d.get("title", "")
         if d.get("type") == "playlist":
             count = d.get("count", 0)
-            meta  = f"📂 Playlist  ·  {count} items"
+            meta  = f"[PL] Playlist  |  {count} items"
             ch    = d.get("channel", "")
-            if ch: meta += f"  ·  {ch}"
-            self.info_status.config(text="✅ Playlist — enable PLAYLIST MODE below", fg=SUCCESS)
+            if ch: meta += f"  |  {ch}"
+            self.info_status.config(text="OK Playlist -- enable PLAYLIST MODE below", fg=SUCCESS)
         else:
             parts = []
-            if d.get("duration"):   parts.append(f"⏱ {d['duration']}")
-            if d.get("channel"):    parts.append(f"👤 {d['channel']}")
-            if d.get("view_count"): parts.append(f"👁 {d['view_count']:,}")
-            meta = "  ·  ".join(parts)
-            self.info_status.config(text="✅ Ready to download", fg=SUCCESS)
+            if d.get("duration"):   parts.append(f"T: {d['duration']}")
+            if d.get("channel"):    parts.append(f"By: {d['channel']}")
+            if d.get("view_count"): parts.append(f"V: {d['view_count']:,}")
+            meta = "  |  ".join(parts)
+            self.info_status.config(text="OK Ready to download", fg=SUCCESS)
         self.info_title.config(text=title[:72] + ("..." if len(title) > 72 else ""), fg=WHITE)
         self.info_meta.config(text=meta)
         self._dl_metadata = {"title": title, "artist": d.get("channel", ""),
@@ -502,7 +593,7 @@ class SoftcurseApp:
             self.thumb_canvas.create_image(84, 48, image=photo, anchor="center")
         else:
             self.thumb_canvas.create_text(84, 48, text="NO THUMB", fill=TEXT_DIM,
-                                          font=(FONT_MONO, 8))
+                                          font=(FONT_MONO, 10))
 
     def _clear_preview(self, keep_url=False):
         if not keep_url: self._info_fetch_url = ""
@@ -510,7 +601,7 @@ class SoftcurseApp:
         self._thumb_photo  = None
         self.thumb_canvas.delete("all")
         self.thumb_canvas.create_text(84, 48, text="NO PREVIEW", fill=TEXT_DIM,
-                                      font=(FONT_MONO, 8))
+                                      font=(FONT_MONO, 10))
         self.info_title.config(text="// PASTE A URL TO PREVIEW //", fg=TEXT_MED)
         self.info_meta.config(text="")
         self.info_status.config(text="", fg=CYAN_DIM)
@@ -523,14 +614,14 @@ class SoftcurseApp:
             self._dl_metadata = result
             filled = [f"{k}: {v}" for k, v in result.items() if v]
             if filled:
-                self._log(f"🏷️  Metadata staged: {', '.join(filled[:3])}"
+                self._log(f"  Metadata staged: {', '.join(filled[:3])}"
                           + ("..." if len(filled) > 3 else ""), "magenta")
-            self.meta_btn.config(text="[ ✎ METADATA SET ✔ ]",
+            self.meta_btn.config(text="[ METADATA SET OK ]",
                                  fg=SUCCESS, highlightbackground=SUCCESS)
 
-    # ── Options ───────────────────────────────────────────────────────────────
+    #  Options 
     def _build_options_section(self, parent):
-        o, i = self._card(parent, BLUE, pad=12, title="▸ Output")
+        o, i = self._card(parent, BLUE, pad=12, title="> Output")
         o.pack(fill="x", pady=(0, 8))
         cols = tk.Frame(i, bg=CARD); cols.pack(fill="x")
 
@@ -565,29 +656,29 @@ class SoftcurseApp:
             values=["128", "192", "256", "320"], state="readonly",
             width=7, style="C.TCombobox").pack(side="left")
         self.kbps_lbl = tk.Label(self.audio_q_frame, text=" kbps",
-            fg=TEXT_DIM, bg=CARD, font=(FONT_MONO, 8))
+            fg=TEXT_DIM, bg=CARD, font=(FONT_MONO, 10))
         self.kbps_lbl.pack(side="left")
         self.audio_q_frame.pack(side="left")
 
         self.video_quality_var = tk.StringVar(value=self.cfg.get("video_quality", "best"))
         self.mp4_q_frame = tk.Frame(q_row, bg=CARD)
         ttk.Combobox(self.mp4_q_frame, textvariable=self.video_quality_var,
-            values=["best", "1080", "720", "480", "360"], state="readonly",
+            values=["best", "2160", "1440", "1080", "720", "480", "360"], state="readonly",
             width=7, style="O.TCombobox").pack(side="left")
         tk.Label(self.mp4_q_frame, text=" res", fg=TEXT_DIM, bg=CARD,
-                 font=(FONT_MONO, 8)).pack(side="left")
+                 font=(FONT_MONO, 10)).pack(side="left")
 
         self.playlist_var = tk.BooleanVar(value=False)
         pr = tk.Frame(right, bg=CARD); pr.pack(fill="x", pady=(10, 0))
         tk.Checkbutton(pr, text="  PLAYLIST MODE",
             variable=self.playlist_var, fg=CYAN, bg=CARD,
             activeforeground=MAGENTA, activebackground=CARD,
-            selectcolor=PANEL, font=(FONT_MONO, 8, "bold"), cursor="hand2"
+            selectcolor=PANEL, font=(FONT_MONO, 10, "bold"), cursor="hand2"
         ).pack(side="left")
 
-    # ── SponsorBlock ──────────────────────────────────────────────────────────
+    #  SponsorBlock 
     def _build_sb_section(self, parent):
-        o, i = self._card(parent, SUCCESS, pad=10, title="▸ SponsorBlock")
+        o, i = self._card(parent, SUCCESS, pad=10, title="> SponsorBlock")
         self.sb_outer = o
         o.pack(fill="x", pady=(0, 8))
 
@@ -599,14 +690,14 @@ class SoftcurseApp:
             variable=self.sb_var, onvalue=True, offvalue=False,
             fg=SUCCESS, bg=CARD,
             activeforeground=WHITE, activebackground=CARD,
-            selectcolor=PANEL, font=(FONT_MONO, 9, "bold"), cursor="hand2",
+            selectcolor=PANEL, font=(FONT_MONO, 13, "bold"), cursor="hand2",
             command=self._toggle_sb_cats
         ).pack(side="left")
 
         # Collapse toggle button
-        self._sb_toggle_btn = tk.Button(hdr, text="▼", command=self._toggle_sb_collapse,
+        self._sb_toggle_btn = tk.Button(hdr, text="v", command=self._toggle_sb_collapse,
             fg=SUCCESS, bg=CARD, activeforeground=BG, activebackground=SUCCESS,
-            font=(FONT_MONO, 8, "bold"), relief="flat", bd=0,
+            font=(FONT_MONO, 10, "bold"), relief="flat", bd=0,
             padx=6, pady=2, cursor="hand2")
         self._sb_toggle_btn.pack(side="right")
 
@@ -615,13 +706,13 @@ class SoftcurseApp:
         self.sb_cat_vars = {}
         saved_cats = set(self.cfg.get("sb_categories", DEFAULT_CATEGORIES))
         cats_display = [
-            ("sponsor",        "💰 Sponsor"),
-            ("intro",          "🎬 Intro"),
-            ("outro",          "🔚 Outro"),
-            ("selfpromo",      "📣 Self-Promo"),
-            ("interaction",    "👍 Interaction"),
-            ("music_offtopic", "🎵 Non-Music"),
-            ("filler",         "💬 Filler"),
+            ("sponsor",        "$ Sponsor"),
+            ("intro",          "> Intro"),
+            ("outro",          "< Outro"),
+            ("selfpromo",      "! Self-Promo"),
+            ("interaction",    "+ Interaction"),
+            ("music_offtopic", "~ Non-Music"),
+            ("filler",         ". Filler"),
         ]
         row1 = tk.Frame(self.sb_cats_frame, bg=CARD); row1.pack(anchor="center", pady=(0, 2))
         row2 = tk.Frame(self.sb_cats_frame, bg=CARD); row2.pack(anchor="center", pady=(2, 0))
@@ -632,7 +723,7 @@ class SoftcurseApp:
             tk.Checkbutton(target_row, text=f"  {label}",
                 variable=var, fg=SUCCESS, bg=CARD,
                 activeforeground=WHITE, activebackground=CARD,
-                selectcolor=PANEL, font=(FONT_MONO, 9, "bold"), cursor="hand2"
+                selectcolor=PANEL, font=(FONT_MONO, 13, "bold"), cursor="hand2"
             ).pack(side="left", padx=8)
         self._toggle_sb_cats()
 
@@ -640,10 +731,10 @@ class SoftcurseApp:
         self._sb_collapsed = not self._sb_collapsed
         if self._sb_collapsed:
             self.sb_cats_frame.pack_forget()
-            self._sb_toggle_btn.config(text="▶")
+            self._sb_toggle_btn.config(text=">")
         else:
             self.sb_cats_frame.pack(fill="x", pady=(8, 0))
-            self._sb_toggle_btn.config(text="▼")
+            self._sb_toggle_btn.config(text="v")
 
     def _toggle_sb_cats(self):
         state = "normal" if self.sb_var.get() else "disabled"
@@ -652,9 +743,9 @@ class SoftcurseApp:
                 try: ww.config(state=state)
                 except: pass
 
-    # ── Clip / Trim ───────────────────────────────────────────────────────────
+    #  Clip / Trim 
     def _build_clip_section(self, parent):
-        o, i = self._card(parent, MAGENTA_DIM, pad=10, title="▸ Clip / Trim  (optional)")
+        o, i = self._card(parent, MAGENTA_DIM, pad=10, title="> Clip / Trim  (optional)")
         self.clip_outer = o
         o.pack(fill="x", pady=(0, 8))
         row = tk.Frame(i, bg=CARD); row.pack(fill="x")
@@ -669,18 +760,18 @@ class SoftcurseApp:
             MAGENTA_DIM, 7).pack(side="left")
         self._lbl(row, "MM:SS  or  HH:MM:SS", size=7, color=TEXT_DIM).pack(side="right")
 
-    # ── Progress ──────────────────────────────────────────────────────────────
+    #  Progress 
     def _build_progress_section(self, parent):
-        o, i = self._card(parent, CYAN, pad=12, title="▸ Status")
+        o, i = self._card(parent, CYAN, pad=12, title="> Status")
         o.pack(fill="x", pady=(0, 8))
 
         # Status line
         status_row = tk.Frame(i, bg=CARD); status_row.pack(fill="x", pady=(0, 8))
         self.status_track = tk.Label(status_row, text="STANDBY",
-            fg=TEXT_MED, bg=CARD, font=(FONT_MONO, 8))
+            fg=TEXT_MED, bg=CARD, font=(FONT_MONO, 10))
         self.status_track.pack(side="right")
 
-        # Progress bar — segmented style
+        # Progress bar  segmented style
         self.prog_canvas = tk.Canvas(i, height=28, bg=PANEL,
             highlightthickness=1, highlightbackground=CYAN_DIM)
         self.prog_canvas.pack(fill="x", pady=(0, 8))
@@ -688,10 +779,10 @@ class SoftcurseApp:
 
         # Stats row
         stats = tk.Frame(i, bg=CARD); stats.pack(fill="x", pady=(0, 12))
-        self.pct_lbl   = tk.Label(stats, text="0%",      fg=CYAN,    bg=CARD, font=(FONT_MONO, 9, "bold"))
-        self.speed_lbl = tk.Label(stats, text="— KB/s",  fg=BLUE,    bg=CARD, font=(FONT_MONO, 8))
-        self.eta_lbl   = tk.Label(stats, text="ETA: —",  fg=TEXT_MED, bg=CARD, font=(FONT_MONO, 8))
-        self.pl_lbl    = tk.Label(stats, text="",         fg=MAGENTA, bg=CARD, font=(FONT_MONO, 8))
+        self.pct_lbl   = tk.Label(stats, text="0%",      fg=CYAN,    bg=CARD, font=(FONT_MONO, 13, "bold"))
+        self.speed_lbl = tk.Label(stats, text=" KB/s",  fg=BLUE,    bg=CARD, font=(FONT_MONO, 10))
+        self.eta_lbl   = tk.Label(stats, text="ETA: ",  fg=TEXT_MED, bg=CARD, font=(FONT_MONO, 10))
+        self.pl_lbl    = tk.Label(stats, text="",         fg=MAGENTA, bg=CARD, font=(FONT_MONO, 10))
         self.pct_lbl.pack(side="left")
         self.speed_lbl.pack(side="left", padx=(14, 0))
         self.eta_lbl.pack(side="left", padx=(14, 0))
@@ -701,12 +792,13 @@ class SoftcurseApp:
         btn_row = tk.Frame(i, bg=CARD); btn_row.pack(fill="x")
 
         self.dl_btn_outer, self.dl_btn_inner = self._bigbtn(
-            btn_row, "  ⬇  DOWNLOAD MP3  ", self._start_download, CYAN, 22, 2)
+
+            btn_row, "  >>  DOWNLOAD MP3  ", self._start_download, CYAN, 22, 2)
         self.dl_btn_outer.pack(side="left")
         # Aliases for compatibility with _set_mode / effects
         self.dl_btn = self.dl_btn_inner
 
-        self.cancel_btn = self._btn(btn_row, "[ ■ CANCEL ]",
+        self.cancel_btn = self._btn(btn_row, "[ X CANCEL ]",
             self._cancel_download, ERROR, 12, 2, CARD)
         self.cancel_btn.pack(side="left", padx=(10, 0))
         self.cancel_btn.config(state="disabled")
@@ -730,9 +822,9 @@ class SoftcurseApp:
                 filled - 4, 2, filled + 2, 26,
                 fill=WHITE, outline="", tags="bar")
 
-    # ── Log ───────────────────────────────────────────────────────────────────
+    #  Log 
     def _build_log_section(self, parent):
-        o, i = self._card(parent, CYAN_DIM, pad=10, title="▸ System Log")
+        o, i = self._card(parent, CYAN_DIM, pad=10, title="> System Log")
         o.pack(fill="both", expand=True, pady=(0, 8))
 
         hdr = tk.Frame(i, bg=CARD); hdr.pack(fill="x", pady=(0, 6))
@@ -741,7 +833,7 @@ class SoftcurseApp:
         lf = tk.Frame(i, bg=PANEL, highlightthickness=1,
                       highlightbackground=ACCENT_LINE)
         lf.pack(fill="both", expand=True)
-        self.log_text = tk.Text(lf, font=(FONT_MONO, 8), fg=CYAN_GLOW, bg=PANEL,
+        self.log_text = tk.Text(lf, font=(FONT_MONO, 10), fg=CYAN_GLOW, bg=PANEL,
             insertbackground=CYAN, relief="flat", bd=6, wrap="word",
             state="disabled", height=7)
         sb2 = tk.Scrollbar(lf, orient="vertical", command=self.log_text.yview)
@@ -752,18 +844,18 @@ class SoftcurseApp:
                         ("info", CYAN_GLOW), ("dim", TEXT_DIM),
                         ("magenta", MAGENTA), ("orange", ORANGE)]:
             self.log_text.tag_configure(tag, foreground=fg)
-        self._log("SYSTEM BOOT... SOFTCURSE v4", "magenta")
+        self._log("SYSTEM BOOT... SOFTCURSE v1.0", "magenta")
         self._log("Initialising...", "dim")
 
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     # PLAYER TAB
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     def _build_tab_player(self):
         self.tab_player = tk.Frame(self.main_frame, bg=BG)
         if not check_pygame():
-            o, i = self._card(self.tab_player, MAGENTA_DIM, title="▸ Player")
+            o, i = self._card(self.tab_player, MAGENTA_DIM, title="> Player")
             o.pack(fill="x", pady=(0, 8))
-            self._lbl(i, "⚠️  pygame not installed", size=11, color=WARNING, bold=True).pack(pady=(4, 4))
+            self._lbl(i, "[!] pygame not installed", size=11, color=WARNING, bold=True).pack(pady=(4, 4))
             self._lbl(i, "pygame is required for audio playback.", color=TEXT_MED).pack()
             self._btn(i, "[ INSTALL PYGAME ]",
                 lambda: threading.Thread(target=lambda: install_pygame(
@@ -775,23 +867,23 @@ class SoftcurseApp:
         self.player_panel = PlayerPanel(self.tab_player)
         self.player_panel.pack(fill="both", expand=True)
 
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     # HISTORY TAB
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     def _build_tab_history(self):
         self.tab_hist = tk.Frame(self.main_frame, bg=BG)
-        o, i = self._card(self.tab_hist, BLUE, title="▸ Download History")
+        o, i = self._card(self.tab_hist, BLUE, title="> Download History")
         o.pack(fill="both", expand=True)
 
         hdr = tk.Frame(i, bg=CARD); hdr.pack(fill="x", pady=(0, 8))
         self._btn(hdr, "[ CLEAR ALL ]", self._clear_history, ERROR, 12).pack(side="right")
-        self._btn(hdr, "[ ↻ REFRESH ]", self._refresh_history, CYAN_DIM, 12).pack(side="right", padx=(0, 6))
+        self._btn(hdr, "[~ REFRESH ]", self._refresh_history, CYAN_DIM, 12).pack(side="right", padx=(0, 6))
 
         sty = ttk.Style()
         sty.configure("H.Treeview", background=PANEL, foreground=CYAN,
-            fieldbackground=PANEL, rowheight=24, font=(FONT_MONO, 8))
+            fieldbackground=PANEL, rowheight=24, font=(FONT_MONO, 10))
         sty.configure("H.Treeview.Heading", background=CARD,
-            foreground=BLUE, font=(FONT_MONO, 8, "bold"))
+            foreground=BLUE, font=(FONT_MONO, 10, "bold"))
         sty.map("H.Treeview", background=[("selected", CYAN_DARK)],
                 foreground=[("selected", CYAN)])
 
@@ -811,8 +903,8 @@ class SoftcurseApp:
         self.hist_tree.tag_configure("failed",  foreground=ERROR)
 
         act = tk.Frame(i, bg=CARD); act.pack(fill="x", pady=(10, 0))
-        self._btn(act, "[ ↺ RE-DOWNLOAD ]", self._retry_selected,  CYAN,    18).pack(side="left")
-        self._btn(act, "[ ♪ PLAY FOLDER ]", self._play_from_hist,  MAGENTA, 16).pack(side="left", padx=(8, 0))
+        self._btn(act, "[  RE-DOWNLOAD ]", self._retry_selected,  CYAN,    18).pack(side="left")
+        self._btn(act, "[  PLAY FOLDER ]", self._play_from_hist,  MAGENTA, 16).pack(side="left", padx=(8, 0))
         self._btn(act, "[ OPEN FOLDER ]",   self._open_hist_folder, SUCCESS, 15).pack(side="left", padx=(8, 0))
         self._btn(act, "[ DELETE ]",         self._delete_hist,     ERROR,   10).pack(side="left", padx=(8, 0))
         self.hist_entry_ids = []
@@ -822,8 +914,8 @@ class SoftcurseApp:
         self.hist_entry_ids = []
         for e in hist.load_history():
             tag = "success" if e.get("status") == "success" else "failed"
-            m   = {"mp3": "♪ MP3", "flac": "◆ FLAC", "wav": "◇ WAV",
-                   "mp4": "▶ MP4"}.get(e.get("mode", ""), e.get("mode", ""))
+            m   = {"mp3": "MP3", "flac": "FLAC", "wav": "WAV",
+                   "mp4": "MP4"}.get(e.get("mode", ""), e.get("mode", ""))
             t   = e.get("title", "")
             if e.get("count", 1) > 1: t = f"[{e['count']}] {t}"
             self.hist_tree.insert("", "end", values=(
@@ -850,7 +942,7 @@ class SoftcurseApp:
         self._set_mode(mode)
         self._show_tab(TAB_DL)
         self._trigger_fetch()
-        self._log(f"↺ Re-queued: {entry.get('title', '')[:50]}", "magenta")
+        self._log(f" Re-queued: {entry.get('title', '')[:50]}", "magenta")
 
     def _play_from_hist(self):
         entry, _ = self._get_hist_entry()
@@ -878,9 +970,9 @@ class SoftcurseApp:
         if messagebox.askyesno("Clear History", "Delete all history?"):
             hist.clear_history(); self._refresh_history()
 
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     # SETTINGS TAB
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     def _build_tab_settings(self):
         self.tab_settings = tk.Frame(self.main_frame, bg=BG)
         c  = tk.Canvas(self.tab_settings, bg=BG, highlightthickness=0)
@@ -895,7 +987,7 @@ class SoftcurseApp:
 
     def _build_settings_content(self, parent):
         # Folders
-        o, i = self._card(parent, CYAN, 12, title="▸ Default Folders")
+        o, i = self._card(parent, CYAN, 12, title="> Default Folders")
         o.pack(fill="x", pady=(0, 10))
         self._setting_folder_vars = {}
         for label, key, default in [
@@ -915,7 +1007,7 @@ class SoftcurseApp:
                 BLUE, 6).pack(side="left", padx=(6, 0))
 
         # Filename template
-        o2, i2 = self._card(parent, MAGENTA_DIM, 12, title="▸ Filename Template")
+        o2, i2 = self._card(parent, MAGENTA_DIM, 12, title="> Filename Template")
         o2.pack(fill="x", pady=(0, 10))
         self._lbl(i2, "%(title)s  %(uploader)s  %(upload_date)s  %(id)s  %(track)s",
             size=7, color=TEXT_DIM).pack(anchor="w", pady=(0, 8))
@@ -933,15 +1025,15 @@ class SoftcurseApp:
                 CYAN_DIM, len(lbl2) + 2, 1, CARD, 7).pack(side="left", padx=(6, 0))
 
         # Visual effects
-        o3, i3 = self._card(parent, ORANGE_DIM, 12, title="▸ Visual Effects")
+        o3, i3 = self._card(parent, ORANGE_DIM, 12, title="> Visual Effects")
         o3.pack(fill="x", pady=(0, 10))
         self.crt_var = tk.BooleanVar(value=self.cfg.get("crt_effects", True))
         tk.Checkbutton(i3, text="  CRT Scanline Effect", variable=self.crt_var,
             fg=ORANGE, bg=CARD, activeforeground=WHITE, activebackground=CARD,
-            selectcolor=PANEL, font=(FONT_MONO, 9, "bold"), cursor="hand2").pack(anchor="w")
+            selectcolor=PANEL, font=(FONT_MONO, 13, "bold"), cursor="hand2").pack(anchor="w")
 
         # Tray & notifications
-        o4, i4 = self._card(parent, BLUE, 12, title="▸ System Tray & Notifications")
+        o4, i4 = self._card(parent, BLUE, 12, title="> System Tray & Notifications")
         o4.pack(fill="x", pady=(0, 10))
         self.tray_var   = tk.BooleanVar(value=self.cfg.get("minimize_to_tray", False))
         self.notify_var = tk.BooleanVar(value=self.cfg.get("notify_on_complete", True))
@@ -951,13 +1043,13 @@ class SoftcurseApp:
         ]:
             tk.Checkbutton(i4, text=f"  {text}", variable=var,
                 fg=CYAN, bg=CARD, activeforeground=WHITE, activebackground=CARD,
-                selectcolor=PANEL, font=(FONT_MONO, 9), cursor="hand2"
+                selectcolor=PANEL, font=(FONT_MONO, 11), cursor="hand2"
             ).pack(anchor="w", pady=3)
         deps = check_tray_deps()
         tk.Label(i4,
-            text=f"  pystray: {'✅' if deps['pystray'] else '❌'}   "
-                 f"plyer: {'✅' if deps['plyer'] else '❌'}",
-            fg=TEXT_DIM, bg=CARD, font=(FONT_MONO, 7)).pack(anchor="w", pady=(4, 0))
+            text=f"  pystray: {'OK' if deps['pystray'] else 'X'}   "
+                 f"plyer: {'OK' if deps['plyer'] else 'X'}",
+            fg=TEXT_DIM, bg=CARD, font=(FONT_MONO, 11)).pack(anchor="w", pady=(4, 0))
         if not deps["pystray"] or not deps["plyer"]:
             self._btn(i4, "[ INSTALL TRAY DEPS ]",
                 lambda: threading.Thread(target=lambda: install_tray_deps(
@@ -965,7 +1057,7 @@ class SoftcurseApp:
                 BLUE, 22, 1, CARD, 8).pack(anchor="w", pady=(8, 0))
 
         # Optional deps
-        o5, i5 = self._card(parent, CYAN_DIM, 12, title="▸ Optional Dependencies")
+        o5, i5 = self._card(parent, CYAN_DIM, 12, title="> Optional Dependencies")
         o5.pack(fill="x", pady=(0, 10))
         for label, check_fn, install_fn, pkg in [
             ("Pillow (thumbnail preview)", check_pil,     install_pil,     "Pillow"),
@@ -974,9 +1066,9 @@ class SoftcurseApp:
         ]:
             row2 = tk.Frame(i5, bg=CARD); row2.pack(fill="x", pady=4)
             ok = check_fn()
-            tk.Label(row2, text=f"{'✅' if ok else '❌'}  {label}",
+            tk.Label(row2, text=f"{'[OK]' if ok else '[X]'}  {label}",
                 fg=SUCCESS if ok else WARNING, bg=CARD,
-                font=(FONT_MONO, 8)).pack(side="left")
+                font=(FONT_MONO, 10)).pack(side="left")
             if not ok:
                 self._btn(row2, "[ INSTALL ]",
                     lambda f=install_fn: threading.Thread(
@@ -984,18 +1076,18 @@ class SoftcurseApp:
                     CYAN_DIM, 12, 1, CARD, 7).pack(side="right")
 
         # yt-dlp updater
-        o6, i6 = self._card(parent, SUCCESS, 12, title="▸ yt-dlp Updater")
+        o6, i6 = self._card(parent, SUCCESS, 12, title="> yt-dlp Updater")
         o6.pack(fill="x", pady=(0, 10))
         self._lbl(i6, "Keep yt-dlp current to fix YouTube download issues.",
             size=7, color=TEXT_DIM).pack(anchor="w", pady=(0, 8))
-        self._btn(i6, "[ ↺ UPDATE yt-dlp NOW ]",
+        self._btn(i6, "[ >> UPDATE yt-dlp NOW ]",
             lambda: threading.Thread(target=lambda: self._run_ytdlp_update(),
                 daemon=True).start(),
             SUCCESS, 24, 2, CARD).pack(anchor="w")
 
         # Save button
         sr = tk.Frame(parent, bg=BG); sr.pack(fill="x", pady=(4, 14))
-        outer_s, inner_s = self._bigbtn(sr, "  ✔  SAVE SETTINGS  ",
+        outer_s, inner_s = self._bigbtn(sr, "  >>  SAVE SETTINGS  ",
                                          self._save_settings, CYAN, 22, 2)
         outer_s.pack(anchor="center")
 
@@ -1017,10 +1109,11 @@ class SoftcurseApp:
         save_config(self.cfg)
         if not self.cfg["crt_effects"] and self.crt_canvas:
             self.crt_canvas.delete("scanline")
-        self._log("✅ Settings saved!", "success")
+            self._scanline_ids = []
+        self._log(" Settings saved!", "success")
         messagebox.showinfo("Softcurse", "Settings saved!")
 
-    # ── Status bar ────────────────────────────────────────────────────────────
+    #  Status bar 
     def _build_status_bar(self):
         bar = tk.Frame(self.main_frame, bg=CARD, height=26)
         bar.pack(fill="x", padx=20, pady=(4, 10))
@@ -1028,15 +1121,15 @@ class SoftcurseApp:
         tk.Frame(bar, bg=CYAN, width=3).pack(side="left", fill="y")
         self.status_bar = tk.Label(bar,
             text="// SOFTCURSE SYSTEMS ONLINE //",
-            fg=TEXT_MED, bg=CARD, font=(FONT_MONO, 7), anchor="w")
+            fg=TEXT_MED, bg=CARD, font=(FONT_MONO, 11), anchor="w")
         self.status_bar.pack(side="left", padx=8, fill="both")
         # Version tag
-        tk.Label(bar, text="SOFTCURSE v4", fg=TEXT_DIM, bg=CARD,
-                 font=(FONT_MONO, 7)).pack(side="right", padx=10)
+        tk.Label(bar, text="SOFTCURSE SYSTEMS", fg=TEXT_DIM, bg=CARD,
+                 font=(FONT_MONO, 11)).pack(side="right", padx=10)
 
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     # EFFECTS
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     def _start_effects(self):
         self._glitch_loop()
         self._pulse_loop()
@@ -1045,8 +1138,8 @@ class SoftcurseApp:
 
     def _glitch_loop(self):
         def glitch():
-            chars = "█▓▒░╔╗╚╝║═╠╣╦╩╬▸◂▴▾"
-            orig  = "[ YT DOWNLOADER // SOFTCURSE ]"
+            chars = "█▓▒░╬╫╪┼┤├╥╨╞╡◈◊▲▼◆●○■□"
+            orig  = "[ MEDIA DOWNLOADER // SOFTCURSE ]"
             def flicker(n=0):
                 w = self.title_canvas.winfo_width()
                 cx = (w // 2) if w > 10 else 420
@@ -1066,20 +1159,43 @@ class SoftcurseApp:
         iv = random.randint(5000, 14000)
         self._glitch_after = self.root.after(iv, lambda: (glitch(), self._glitch_loop()))
 
+    def _build_crt_scanlines(self):
+        """Fix #2: Create scanline canvas items ONCE, then reuse via coords()."""
+        self.crt_canvas.delete("scanline")
+        self._scanline_ids = []
+        h = self.root.winfo_height() or 840
+        w = self.root.winfo_width()  or 860
+        scanline_color = "#060606"
+        for y in range(0, h, 4):
+            lid = self.crt_canvas.create_line(0, y, w, y,
+                fill=scanline_color, width=1, tags="scanline", stipple="gray50")
+            self._scanline_ids.append(lid)
+        # Persistent glitch line (hidden by default)
+        self._glitch_line_id = self.crt_canvas.create_line(
+            0, 0, w, 0, fill=MAGENTA, width=1, tags="scanline", state="hidden")
+        self.crt_canvas.lower("scanline")
+
     def _crt_loop(self):
         if not self.cfg.get("crt_effects", True): return
-        self.crt_canvas.delete("scanline")
-        h   = self.root.winfo_height() or 840
-        w   = self.root.winfo_width()  or 860
+        # Build scanlines if not yet created
+        if not self._scanline_ids:
+            self._build_crt_scanlines()
+            self._crt_after = self.root.after(80, self._crt_loop)
+            return
+        # Update positions only (no create/delete)
         off = int(time.time() * 30) % 6
-        for y in range(off, h, 4):
-            self.crt_canvas.create_line(0, y, w, y, fill="#001622", width=1,
-                tags="scanline", stipple="gray50")
-        if random.random() < 0.04:
+        w   = self.root.winfo_width() or 860
+        for i, lid in enumerate(self._scanline_ids):
+            y = i * 4 + off
+            self.crt_canvas.coords(lid, 0, y, w, y)
+        # Rare magenta glitch line  reuse persistent item
+        if random.random() < 0.04 and self._glitch_line_id:
+            h = self.root.winfo_height() or 840
             gy = random.randint(0, h)
-            self.crt_canvas.create_line(0, gy, w, gy, fill=MAGENTA,
-                width=1, tags="scanline")
-        self.crt_canvas.lower("scanline")
+            self.crt_canvas.coords(self._glitch_line_id, 0, gy, w, gy)
+            self.crt_canvas.itemconfig(self._glitch_line_id, state="normal")
+            self.root.after(160, lambda: self.crt_canvas.itemconfig(
+                self._glitch_line_id, state="hidden"))
         self._crt_after = self.root.after(80, self._crt_loop)
 
     def _pulse_loop(self):
@@ -1093,6 +1209,10 @@ class SoftcurseApp:
         palette = palettes.get(mode, palettes["mp3"])
         idx = [0]
         def pulse():
+            # Fix #5: Skip pulse when download tab is not active
+            if self._active_tab != TAB_DL:
+                self._pulse_after = self.root.after(500, pulse)
+                return
             try:
                 c = palette[idx[0] % len(palette)]
                 self.dl_btn_outer.config(bg=c)
@@ -1101,20 +1221,20 @@ class SoftcurseApp:
             self._pulse_after = self.root.after(160, pulse)
         pulse()
 
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     # DEPS
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     def _check_deps_async(self):
         def check():
             if not check_ytdlp():
-                self._log("⚠️  yt-dlp missing — installing...", "warn")
+                self._log("  yt-dlp missing  installing...", "warn")
                 ok = install_ytdlp(log_callback=lambda m: self._log(m, "warn"))
-                self._log("✅ yt-dlp ready!" if ok else "❌ pip install yt-dlp",
+                self._log(" yt-dlp ready!" if ok else " pip install yt-dlp",
                           "success" if ok else "error")
             else:
-                self._log("✅ yt-dlp: ONLINE", "success")
+                self._log(" yt-dlp: ONLINE", "success")
             ffmpeg = get_ffmpeg_path()
-            self._log("✅ ffmpeg: ONLINE" if ffmpeg else "⚠️  ffmpeg NOT FOUND",
+            self._log(" ffmpeg: ONLINE" if ffmpeg else "  ffmpeg NOT FOUND",
                       "success" if ffmpeg else "warn")
             if not ffmpeg:
                 self._log("   Install: winget install ffmpeg", "dim")
@@ -1123,17 +1243,17 @@ class SoftcurseApp:
                 ("mutagen", check_mutagen()),
                 ("pygame",  check_pygame()),
             ]:
-                self._log(f"{'✅' if ok else 'ℹ️ '} {label}: "
+                self._log(f"{'' if ok else ' '} {label}: "
                           f"{'ONLINE' if ok else 'not installed (optional)'}",
                           "success" if ok else "dim")
-            self._log("─" * 46, "dim")
-            self._log("READY — Softcurse v4 // All systems nominal", "info")
+            self._log("" * 46, "dim")
+            self._log("READY  Softcurse // All systems nominal", "info")
             self._update_status("READY")
         threading.Thread(target=check, daemon=True).start()
 
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     # TRAY
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     def _maybe_start_tray(self):
         from tray import TRAY_AVAILABLE
         if TRAY_AVAILABLE:
@@ -1155,9 +1275,9 @@ class SoftcurseApp:
         else:
             self._force_quit()
 
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     # ACTIONS
-    # ════════════════════════════════════════════════════════════════════════════
+    # 
     def _paste_url(self):
         try:
             self.url_var.set(self.root.clipboard_get().strip())
@@ -1185,10 +1305,10 @@ class SoftcurseApp:
     def _start_download(self):
         url = self.url_var.get().strip()
         if not url or not url.startswith("http"):
-            self._log("❌ Invalid URL!", "error"); return
+            self._log(" Invalid URL!", "error"); return
         folder = self.folder_var.get().strip()
         if not folder:
-            self._log("❌ No output folder!", "error"); return
+            self._log(" No output folder!", "error"); return
 
         mode    = self._mode.get()
         quality = self.quality_var.get()
@@ -1202,26 +1322,26 @@ class SoftcurseApp:
         if self.sb_var.get():
             sb_cats = [k for k, v in self.sb_cat_vars.items() if v.get()]
             if not sb_cats: sb_cats = DEFAULT_CATEGORIES
-            self._log(f"🛡  SponsorBlock: {', '.join(sb_cats)}", "orange")
+            self._log(f"  SponsorBlock: {', '.join(sb_cats)}", "orange")
 
         self._downloading = True
         self.dl_btn.config(state="disabled")
         self.cancel_btn.config(state="normal")
         self._draw_progress(0)
         self.pct_lbl.config(text="0%", fg=CYAN)
-        self.speed_lbl.config(text="— KB/s")
-        self.eta_lbl.config(text="ETA: —")
+        self.speed_lbl.config(text=" KB/s")
+        self.eta_lbl.config(text="ETA: ")
         self.pl_lbl.config(text="")
         self.status_track.config(text="CONNECTING...", fg=BLUE)
 
         self._dl_url = url; self._dl_mode = mode; self._dl_folder = folder
         ext = mode.upper()
-        self._log("─" * 46, "dim")
-        self._log(f"▸ {url[:65]}{'...' if len(url) > 65 else ''}", "info")
-        self._log(f"▸ Mode: {ext}  |  Folder: {folder}", "dim")
-        if cs or ce: self._log(f"✂️  Clip: {cs or 'start'} → {ce or 'end'}", "magenta")
+        self._log("" * 46, "dim")
+        self._log(f" {url[:65]}{'...' if len(url) > 65 else ''}", "info")
+        self._log(f" Mode: {ext}  |  Folder: {folder}", "dim")
+        if cs or ce: self._log(f"  Clip: {cs or 'start'}  {ce or 'end'}", "magenta")
         if meta and any(meta.values()):
-            self._log(f"🏷️  Metadata: "
+            self._log(f"  Metadata: "
                       f"{', '.join(f'{k}={v}' for k,v in meta.items() if v)[:60]}", "magenta")
         self._log(f"INITIATING {ext} DOWNLOAD...", "magenta")
         self._save_cfg_quick()
@@ -1241,7 +1361,7 @@ class SoftcurseApp:
 
     def _cancel_download(self):
         self.dl.cancel()
-        self._log("⛔ Cancelling...", "warn")
+        self._log(" Cancelling...", "warn")
         self._reset_ui()
 
     def _on_progress(self, data):
@@ -1255,25 +1375,25 @@ class SoftcurseApp:
             pct = data.get("percent", 0)
             self._draw_progress(pct, bc)
             self.pct_lbl.config(text=f"{pct:.1f}%", fg=bc)
-            self.speed_lbl.config(text=data.get("speed", "—"))
-            self.eta_lbl.config(text=f"ETA: {data.get('eta', '—')}")
+            self.speed_lbl.config(text=data.get("speed", ""))
+            self.eta_lbl.config(text=f"ETA: {data.get('eta', '')}")
             fn = data.get("filename", "")
             self.status_track.config(
-                text=f"⬇ {fn[:48]}{'...' if len(fn) > 48 else ''}", fg=BLUE)
+                text=f" {fn[:48]}{'...' if len(fn) > 48 else ''}", fg=BLUE)
             if self._tray: self._tray.update_tooltip(f"{pct:.0f}% {fn[:30]}")
         elif status == "converting":
             cc = MAGENTA if mode == "mp3" else bc
             self._draw_progress(100, cc); self.pct_lbl.config(text="100%", fg=cc)
-            labels = {"mp3": "⚙ CONVERTING→MP3", "flac": "⚙ CONVERTING→FLAC",
-                      "wav": "⚙ CONVERTING→WAV", "mp4": "⚙ MERGING VIDEO"}
-            self.status_track.config(text=labels.get(mode, "⚙ PROCESSING"), fg=cc)
+            labels = {"mp3": " CONVERTINGMP3", "flac": " CONVERTINGFLAC",
+                      "wav": " CONVERTINGWAV", "mp4": " MERGING VIDEO"}
+            self.status_track.config(text=labels.get(mode, " PROCESSING"), fg=cc)
         elif status == "playlist":
             cur = data.get("current", 0); total = data.get("total", 0)
             pct = (cur - 1) / total * 100 if total > 0 else 0
             self._draw_progress(pct, BLUE)
             self.pl_lbl.config(text=f"[{cur}/{total}]", fg=MAGENTA)
             t = data.get("title", "")
-            self.status_track.config(text=f"⬇ {t[:48]}", fg=BLUE)
+            self.status_track.config(text=f" {t[:48]}", fg=BLUE)
 
     def _on_dl_log(self, msg):
         self.root.after(0, lambda: self._log(msg))
@@ -1284,14 +1404,14 @@ class SoftcurseApp:
             self.pct_lbl.config(text="100%", fg=SUCCESS)
             self.status_track.config(text="COMPLETE", fg=SUCCESS)
             ext = self._dl_mode.upper()
-            self._log(f"🎉 COMPLETE — {count} {ext} file(s) saved!", "success")
-            self._log("─" * 46, "dim")
+            self._log(f" COMPLETE  {count} {ext} file(s) saved!", "success")
+            self._log("" * 46, "dim")
             self._reset_ui()
             self._update_status("COMPLETE")
             hist.add_entry(title or self._dl_url[:80], self._dl_url,
                            self._dl_mode, self._dl_folder, count, "success")
             if self.cfg.get("notify_on_complete", True):
-                send_notification("Softcurse — Complete",
+                send_notification("Softcurse  Complete",
                     f"{count} {ext} file(s) saved!\n{title[:50] if title else ''}")
             if self._tray: self._tray.update_tooltip("Download Complete!")
             if self._dl_mode in ("mp3", "flac", "wav") and check_pygame():
@@ -1302,11 +1422,11 @@ class SoftcurseApp:
         def update():
             self._draw_progress(0)
             self.status_track.config(text="ERROR", fg=ERROR)
-            self._log(f"❌ ERROR: {error}", "error")
+            self._log(f" ERROR: {error}", "error")
             self._reset_ui(); self._update_status("ERROR")
             hist.add_failed_entry(self._dl_url, self._dl_mode, self._dl_folder, error)
             if self.cfg.get("notify_on_complete", True):
-                send_notification("Softcurse — Error", f"Download failed: {error[:80]}")
+                send_notification("Softcurse  Error", f"Download failed: {error[:80]}")
         self.root.after(0, update)
 
     def _reset_ui(self):
@@ -1318,15 +1438,15 @@ class SoftcurseApp:
         ts = time.strftime("%H:%M:%S")
         self.status_bar.config(text=f"// {msg} // [{ts}]")
 
-    # ── Logging ───────────────────────────────────────────────────────────────
+    #  Logging 
     def _log(self, msg, tag="info"):
         def _do():
             self.log_text.config(state="normal")
             ts = time.strftime("%H:%M:%S")
             if tag == "info":
-                if any(x in msg for x in ["✅", "🎉", "COMPLETE"]): t = "success"
-                elif any(x in msg for x in ["❌", "ERROR"]):        t = "error"
-                elif any(x in msg for x in ["⚠️", "warn"]):         t = "warn"
+                if any(x in msg for x in ["", "", "COMPLETE"]): t = "success"
+                elif any(x in msg for x in ["", "ERROR"]):        t = "error"
+                elif any(x in msg for x in ["", "warn"]):         t = "warn"
                 else: t = "info"
             else:
                 t = tag
@@ -1339,7 +1459,7 @@ class SoftcurseApp:
                 self.log_text.config(state="disabled")
         self.root.after(0, _do)
 
-    # ── Config ────────────────────────────────────────────────────────────────
+    #  Config 
     def _save_cfg_quick(self):
         mode = self._mode.get()
         key = "mp4_output_folder" if mode == "mp4" else "output_folder"

@@ -1,9 +1,9 @@
 @echo off
-title Softcurse // Build Standalone EXE
+title Softcurse // Media Downloader v1.0 Build
 color 0B
 echo.
 echo  ╔════════════════════════════════════════════════╗
-echo  ║       BUILDING SOFTCURSE STANDALONE EXE      ║
+echo  ║    BUILDING SOFTCURSE MEDIA DOWNLOADER v1.0    ║
 echo  ╚════════════════════════════════════════════════╝
 echo.
 
@@ -20,19 +20,19 @@ set HIDDEN=%HIDDEN% --hidden-import=pygame --hidden-import=pystray --hidden-impo
 if exist "ffmpeg\ffmpeg.exe" (
     echo  [*] Bundling with ffmpeg.exe...
     %PYTHON_CMD% -m PyInstaller --onefile --windowed ^
-        --name "Softcurse_YT_Downloader" ^
+        --name "Softcurse_Media_Downloader" ^
         --icon "assets\yt.ico" ^
         --add-data "ffmpeg\ffmpeg.exe;ffmpeg" ^
         %HIDDEN% main.py
 ) else (
     echo  [!] No bundled ffmpeg — users need ffmpeg installed separately.
     %PYTHON_CMD% -m PyInstaller --onefile --windowed ^
-        --name "Softcurse_YT_Downloader" ^
+        --name "Softcurse_Media_Downloader" ^
         --icon "assets\yt.ico" ^
         %HIDDEN% main.py
 )
 
 echo.
-echo  [DONE] dist\Softcurse_YT_Downloader.exe
+echo  [DONE] dist\Softcurse_Media_Downloader.exe
 echo  [NEXT] Run installer\softcurse_installer.iss in Inno Setup to build installer.
 pause

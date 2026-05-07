@@ -2,26 +2,26 @@
 metadata_editor.py - Softcurse // Metadata Editor
 Pre-download metadata editor: set artist, album, genre, year, track, comment.
 Uses mutagen to write ID3/FLAC/MP4 tags after download.
-mutagen is optional — editor shows but tags silently skipped if missing.
+mutagen is optional  editor shows but tags silently skipped if missing.
 """
 import os
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk
 
-# ── Palette (matches main app) ─────────────────────────────────────────────────
-BG          = "#020202"
-CYAN        = "#00ffff"
-CYAN_DIM    = "#007a7a"
-DARK_PANEL  = "#050f0f"
-MAGENTA     = "#ff00ff"
+#  Palette  SOFTCURSE/SYS (matches gui.py) 
+BG          = "#020202"       # Void Black
+CYAN        = "#00ffff"       # Primary Accent
+CYAN_DIM    = "#007373"       # Dim Aqua
+DARK_PANEL  = "#050810"       # Abyss Glass
+MAGENTA     = "#ff00ff"       # Glitch/Alert
 MAGENTA_DIM = "#660066"
-WHITE       = "#e0f7f7"
-TEXT_DIM    = "#407070"
-SUCCESS     = "#00ff88"
-ERROR       = "#ff3355"
-BLUE        = "#0088ff"
-ORANGE      = "#ff8800"
-FONT_MONO   = "Courier New"
+WHITE       = "#e8f4f8"       # Ice White
+TEXT_DIM    = "#004a4a"       # Deep dim labels
+SUCCESS     = "#00e676"       # Success green
+ERROR       = "#ff5252"       # Error red
+BLUE        = "#0088ff"       # Neon Blue
+ORANGE      = "#ff6b35"       # Electric Orange
+FONT_MONO   = "Consolas"
 
 GENRE_LIST = [
     "", "Alternative", "Ambient", "Blues", "Classical", "Country",
@@ -49,10 +49,10 @@ def install_mutagen(log_cb=None):
             [sys.executable, "-m", "pip", "install", "mutagen"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
-        log("✅ mutagen installed!")
+        log(" mutagen installed!")
         return True
     except Exception as e:
-        log(f"❌ mutagen install failed: {e}")
+        log(f" mutagen install failed: {e}")
         return False
 
 
@@ -148,7 +148,7 @@ def write_tags(filepath: str, tags: dict) -> str:
         return ""
 
     except ImportError:
-        return "mutagen not installed — tags skipped"
+        return "mutagen not installed  tags skipped"
     except Exception as e:
         return str(e)
 
@@ -204,10 +204,10 @@ class MetadataEditorDialog:
         # Header
         hdr = tk.Canvas(win, bg=BG, height=52, highlightthickness=0)
         hdr.pack(fill="x")
-        hdr.create_text(260, 16, text="◈  S O F T C U R S E  ◈",
+        hdr.create_text(260, 16, text="  S O F T C U R S E  ",
                         font=(FONT_MONO,8,"bold"), fill=MAGENTA, anchor="center")
         hdr.create_text(260, 36, text="[ METADATA EDITOR ]",
-                        font=(FONT_MONO,16,"bold"), fill=CYAN, anchor="center")
+                        font=(FONT_MONO,18,"bold"), fill=CYAN, anchor="center")
 
         # Outer neon border
         outer = tk.Frame(win, bg=CYAN, padx=1, pady=1)
@@ -217,7 +217,7 @@ class MetadataEditorDialog:
 
         if not check_mutagen():
             tk.Label(inner,
-                text="⚠️  mutagen not installed\nTags will be skipped.\nInstall via: pip install mutagen",
+                text="  mutagen not installed\nTags will be skipped.\nInstall via: pip install mutagen",
                 fg=ORANGE, bg=DARK_PANEL, font=(FONT_MONO,9),
                 justify="center").pack(pady=(0,8))
 
@@ -240,7 +240,7 @@ class MetadataEditorDialog:
         ]
 
         entry_kw = dict(
-            font=(FONT_MONO, 9), fg=WHITE, bg="#0a1a1a",
+            font=(FONT_MONO, 11), fg=WHITE, bg="#0a1a1a",
             insertbackground=CYAN, relief="flat", bd=4,
             highlightthickness=1, highlightbackground=CYAN_DIM,
             highlightcolor=CYAN,
@@ -251,7 +251,7 @@ class MetadataEditorDialog:
             row.pack(fill="x", pady=4)
             tk.Label(row, text=f"{label}:", width=10, anchor="e",
                      fg=CYAN_DIM, bg=DARK_PANEL,
-                     font=(FONT_MONO, 8)).pack(side="left")
+                     font=(FONT_MONO, 10)).pack(side="left")
 
             var = tk.StringVar(value=self.prefill.get(key, ""))
             self._vars[key] = var
@@ -263,8 +263,8 @@ class MetadataEditorDialog:
             else:
                 e = tk.Entry(row, textvariable=var, **entry_kw)
                 e.pack(side="left", fill="x", expand=True, padx=(6,0))
-                e.bind("<FocusIn>",  lambda ev,w=e: w.config(highlightbackground=CYAN))
-                e.bind("<FocusOut>", lambda ev,w=e: w.config(highlightbackground=CYAN_DIM))
+                e.bind("<FocusIn>",  lambda _,w=e: w.config(highlightbackground=CYAN))
+                e.bind("<FocusOut>", lambda _,w=e: w.config(highlightbackground=CYAN_DIM))
 
         # Separator
         tk.Frame(inner, bg=CYAN_DIM, height=1).pack(fill="x", pady=(12,8))
@@ -286,14 +286,14 @@ class MetadataEditorDialog:
             self.win.destroy()
 
         for text, cmd, color in [
-            ("[ ✔ APPLY TAGS ]", save,   CYAN),
+            ("[  APPLY TAGS ]", save,   CYAN),
             ("[ CLR ]",          clear,  TEXT_DIM),
             ("[ CANCEL ]",       cancel, ERROR),
         ]:
             b = tk.Button(btn_row, text=text, command=cmd,
                           fg=color, bg=DARK_PANEL,
                           activeforeground=BG, activebackground=color,
-                          font=(FONT_MONO, 9, "bold"),
+                          font=(FONT_MONO, 11, "bold"),
                           relief="flat", bd=0, cursor="hand2",
                           highlightthickness=1, highlightbackground=color)
             b.bind("<Enter>", lambda e,b=b,c=color: b.config(bg=c, fg=BG))

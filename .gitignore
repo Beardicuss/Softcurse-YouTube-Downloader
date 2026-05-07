@@ -16,5 +16,6 @@ installer/Output/
 
 # App-specific runtime/history
 ffmpeg/
+{ffmpeg}/
 *.log
 .softcurse_history.json

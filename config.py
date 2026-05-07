@@ -1,5 +1,5 @@
 """
-config.py - Softcurse // Settings persistence v4
+config.py - Softcurse // Settings persistence v1.0
 """
 import json, os
 
@@ -18,7 +18,6 @@ DEFAULT_CONFIG = {
     "crt_effects":         True,
     "sponsorblock":        False,
     "sb_categories":       ["sponsor","intro","outro","selfpromo","interaction"],
-    "theme":               "softcurse",
 }
 
 def load_config() -> dict:

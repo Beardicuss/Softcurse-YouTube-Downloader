@@ -1,5 +1,5 @@
 """
-downloader.py - Softcurse // Download Engine v4
+downloader.py - Softcurse // Download Engine v1.0
 Modes: MP3, FLAC, WAV, MP4
 Features: SponsorBlock, clip/trim, filename templates, playlists, metadata injection
 """
@@ -191,11 +191,10 @@ class Downloader:
         else:
             # mp4
             if video_quality == "best":
-                fmt = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+                fmt = "bestvideo+bestaudio/best"
             else:
                 h   = video_quality
-                fmt = (f"bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]"
-                       f"/bestvideo[height<={h}]+bestaudio/best[height<={h}]/best")
+                fmt = (f"bestvideo[height<={h}]+bestaudio/best[height<={h}]/best")
             pp = [
                 {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
                 {"key": "FFmpegMetadata", "add_metadata": True},
