@@ -8,11 +8,17 @@ from typing import Callable, List, Tuple
 
 
 def get_ffmpeg_path():
-    base = os.path.dirname(os.path.abspath(__file__))
-    for sub in ["ffmpeg", "{ffmpeg}"]:
-        c = os.path.join(base, sub, "ffmpeg.exe")
-        if os.path.exists(c):
-            return c
+    bases = [os.path.dirname(os.path.abspath(__file__))]
+    if getattr(sys, 'frozen', False):
+        exe_dir = os.path.dirname(sys.executable)
+        bases.append(exe_dir)
+        bases.append(os.path.abspath(os.path.join(exe_dir, '..')))
+        
+    for base in bases:
+        for sub in ["ffmpeg", "{ffmpeg}", ""]:
+            c = os.path.join(base, sub, "ffmpeg.exe")
+            if os.path.exists(c):
+                return c
     try:
         r = subprocess.run(["ffmpeg", "-version"], capture_output=True, timeout=5)
         if r.returncode == 0:

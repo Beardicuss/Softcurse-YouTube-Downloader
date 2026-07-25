@@ -17,20 +17,11 @@ echo  [*] Collecting hidden imports...
 set HIDDEN=--hidden-import=yt_dlp --hidden-import=mutagen --hidden-import=PIL
 set HIDDEN=%HIDDEN% --hidden-import=pygame --hidden-import=pystray --hidden-import=plyer
 
-if exist "ffmpeg\ffmpeg.exe" (
-    echo  [*] Bundling with ffmpeg.exe...
-    %PYTHON_CMD% -m PyInstaller --onefile --windowed ^
-        --name "Softcurse_Media_Downloader" ^
-        --icon "assets\yt.ico" ^
-        --add-data "ffmpeg\ffmpeg.exe;ffmpeg" ^
-        %HIDDEN% main.py
-) else (
-    echo  [!] No bundled ffmpeg — users need ffmpeg installed separately.
-    %PYTHON_CMD% -m PyInstaller --onefile --windowed ^
-        --name "Softcurse_Media_Downloader" ^
-        --icon "assets\yt.ico" ^
-        %HIDDEN% main.py
-)
+echo  [*] Building executable...
+%PYTHON_CMD% -m PyInstaller --onefile --windowed ^
+    --name "Softcurse_Media_Downloader" ^
+    --icon "assets\yt.ico" ^
+    %HIDDEN% main.py
 
 echo.
 echo  [DONE] dist\Softcurse_Media_Downloader.exe
