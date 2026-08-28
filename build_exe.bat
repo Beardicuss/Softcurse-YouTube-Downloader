@@ -11,7 +11,11 @@ set PYTHON_CMD=python
 python --version >nul 2>&1
 if errorlevel 1 ( set PYTHON_CMD=py )
 
-%PYTHON_CMD% -m pip install pyinstaller -q
+%PYTHON_CMD% -m pip install --upgrade -r requirements.txt pyinstaller
+if errorlevel 1 (
+    echo  [ERROR] Dependency installation failed. Build aborted.
+    exit /b 1
+)
 
 echo  [*] Collecting hidden imports...
 set HIDDEN=--hidden-import=yt_dlp --hidden-import=mutagen --hidden-import=PIL
@@ -22,6 +26,10 @@ echo  [*] Building executable...
     --name "Softcurse_Media_Downloader" ^
     --icon "assets\yt.ico" ^
     %HIDDEN% main.py
+if errorlevel 1 (
+    echo  [ERROR] PyInstaller failed. No release was produced.
+    exit /b 1
+)
 
 echo.
 echo  [DONE] dist\Softcurse_Media_Downloader.exe

@@ -143,6 +143,21 @@ class Downloader:
         def prog(d):
             if on_progress: on_progress(d)
 
+        class YtdlpLogger:
+            """Forward yt-dlp diagnostics to the UI instead of hiding failures."""
+            def debug(self, message):
+                # yt-dlp sends informational messages through debug(). Keep the
+                # UI readable while preserving warnings and errors below.
+                if message.startswith("[debug]"):
+                    return
+                log(message)
+
+            def warning(self, message):
+                log(f"⚠️  {message}")
+
+            def error(self, message):
+                log(f"❌ {message}")
+
         try:
             import yt_dlp
         except ImportError:
@@ -244,10 +259,14 @@ class Downloader:
             "postprocessors": pp,
             "progress_hooks": [ydl_hook],
             "quiet":         True,
-            "no_warnings":   True,
+            "no_warnings":   False,
+            "logger":        YtdlpLogger(),
             "writethumbnail": write_thumb,
             "noplaylist":    not is_playlist,
-            "ignoreerrors":  True,
+            # Never report success when extraction, download, or conversion
+            # failed. With ignoreerrors=True yt-dlp could leave only the
+            # thumbnail behind and return control as though the media existed.
+            "ignoreerrors":  False,
         }
         if ffmpeg_dir:
             ydl_opts["ffmpeg_location"] = ffmpeg_dir
@@ -289,7 +308,12 @@ class Downloader:
                         prog({"status":"playlist","current":i+1,
                               "total":total,"title":title,"percent":0})
                         try:
-                            ydl.download([entry.get("webpage_url") or entry.get("url")])
+                            entry_url = entry.get("webpage_url") or entry.get("url")
+                            if not entry_url:
+                                raise RuntimeError("Playlist entry has no downloadable URL")
+                            result = ydl.download([entry_url])
+                            if result:
+                                raise RuntimeError(f"yt-dlp returned error code {result}")
                         except Exception as e:
                             log(f"⚠️  Skipped: {title} ({e})")
                     if not self._cancel_flag:
@@ -302,7 +326,9 @@ class Downloader:
                 else:
                     title = info.get("title","Unknown")
                     log(f"⬇️  [{mode.upper()}] {title}")
-                    ydl.download([url])
+                    result = ydl.download([url])
+                    if result:
+                        raise RuntimeError(f"yt-dlp returned error code {result}")
                     log(f"🎉 Done! Saved to: {output_folder}")
                     # Write metadata to the file
                     if metadata and any(metadata.values()):
