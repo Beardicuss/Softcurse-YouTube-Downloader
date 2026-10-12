@@ -4,7 +4,11 @@ Modes: MP3, FLAC, WAV, MP4
 Features: SponsorBlock, clip/trim, filename templates, playlists, metadata injection
 """
 import os, sys, subprocess, threading
-from typing import Callable, List, Tuple
+from dataclasses import dataclass
+from typing import Callable
+from urllib.parse import urlparse
+
+from download_models import DownloadRequest, DownloadResult, DownloadStatus, ProgressUpdate
 
 
 def get_ffmpeg_path():
@@ -88,6 +92,55 @@ def _time_to_secs(t: str) -> float:
         return 0.0
 
 
+VALID_MODES = {"mp3", "flac", "wav", "mp4"}
+VALID_AUDIO_QUALITIES = {"128", "192", "256", "320"}
+VALID_VIDEO_QUALITIES = {"best", "1080", "720", "480", "360"}
+
+
+def _validated_time(value: str, label: str) -> float | None:
+    """Validate a user timestamp and return seconds, or None when omitted."""
+    value = value.strip()
+    if not value:
+        return None
+    parts = value.split(":")
+    if len(parts) not in (1, 2, 3):
+        raise ValueError(f"Invalid {label}: use SS, MM:SS, or HH:MM:SS")
+    try:
+        numbers = [float(part) for part in parts]
+    except ValueError as exc:
+        raise ValueError(f"Invalid {label}: use numbers only") from exc
+    if any(number < 0 for number in numbers):
+        raise ValueError(f"Invalid {label}: time cannot be negative")
+    if len(numbers) >= 2 and numbers[-1] >= 60:
+        raise ValueError(f"Invalid {label}: seconds must be below 60")
+    if len(numbers) == 3 and numbers[-2] >= 60:
+        raise ValueError(f"Invalid {label}: minutes must be below 60")
+    if len(numbers) == 3:
+        return numbers[0] * 3600 + numbers[1] * 60 + numbers[2]
+    if len(numbers) == 2:
+        return numbers[0] * 60 + numbers[1]
+    return numbers[0]
+
+
+def validate_request(url, output_folder, mode, quality, video_quality, clip_start, clip_end):
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Enter a valid HTTP or HTTPS media URL")
+    if not output_folder or not output_folder.strip():
+        raise ValueError("Choose an output folder")
+    if mode not in VALID_MODES:
+        raise ValueError(f"Unsupported output format: {mode}")
+    if mode == "mp3" and quality not in VALID_AUDIO_QUALITIES:
+        raise ValueError(f"Unsupported MP3 quality: {quality}")
+    if mode == "mp4" and video_quality not in VALID_VIDEO_QUALITIES:
+        raise ValueError(f"Unsupported video quality: {video_quality}")
+    start = _validated_time(clip_start, "clip start")
+    end = _validated_time(clip_end, "clip end")
+    if start is not None and end is not None and end <= start:
+        raise ValueError("Clip end must be later than clip start")
+    return start, end
+
+
 # ── Audio mode configs ────────────────────────────────────────────────────────
 AUDIO_MODES = {
     "mp3":  {"codec": "mp3",  "ext": "mp3",  "thumb": True},
@@ -96,48 +149,71 @@ AUDIO_MODES = {
 }
 
 
+@dataclass
+class DownloadJob:
+    cancel_event: threading.Event
+    thread: threading.Thread | None = None
+
+
 class Downloader:
     def __init__(self):
-        self._cancel_flag = False
+        self._lock = threading.Lock()
+        self._active_job = None
 
     def cancel(self):
-        self._cancel_flag = True
+        with self._lock:
+            job = self._active_job
+        if job:
+            job.cancel_event.set()
 
     def download(
         self,
-        url: str,
-        output_folder: str,
-        mode: str = "mp3",            # "mp3","flac","wav","mp4"
-        quality: str = "320",         # kbps for mp3
-        video_quality: str = "best",
-        is_playlist: bool = False,
-        filename_template: str = "%(title)s",
-        clip_start: str = "",
-        clip_end: str = "",
-        sponsorblock_cats: List[str] = None,  # None = disabled
-        metadata: dict = None,                # pre-set tags to embed
+        request: DownloadRequest,
         on_progress: Callable = None,
         on_log: Callable = None,
         on_complete: Callable = None,
         on_error: Callable = None,
+        on_cancel: Callable = None,
     ):
-        self._cancel_flag = False
+        job = DownloadJob(threading.Event())
+
+        def run_job():
+            try:
+                self._worker(
+                    request.url, request.output_folder, request.mode,
+                    request.quality, request.video_quality,
+                    request.is_playlist, request.filename_template,
+                    request.clip_start, request.clip_end,
+                    list(request.sponsorblock_cats) if request.sponsorblock_cats else None,
+                    request.metadata,
+                    on_progress, on_log, on_complete, on_error,
+                    job.cancel_event, on_cancel,
+                )
+            finally:
+                with self._lock:
+                    if self._active_job is job:
+                        self._active_job = None
+
         thread = threading.Thread(
-            target=self._worker,
-            args=(url, output_folder, mode, quality, video_quality,
-                  is_playlist, filename_template, clip_start, clip_end,
-                  sponsorblock_cats, metadata,
-                  on_progress, on_log, on_complete, on_error),
+            target=run_job,
             daemon=True)
+        job.thread = thread
+        with self._lock:
+            if self._active_job and self._active_job.thread.is_alive():
+                raise RuntimeError("A download is already running")
+            self._active_job = job
         thread.start()
-        return thread
+        return job
 
     def _worker(
         self, url, output_folder, mode, quality, video_quality,
         is_playlist, filename_template, clip_start, clip_end,
         sponsorblock_cats, metadata,
-        on_progress, on_log, on_complete, on_error
+        on_progress, on_log, on_complete, on_error,
+        cancel_event=None, on_cancel=None,
     ):
+        cancel_event = cancel_event or threading.Event()
+
         def log(m):
             if on_log: on_log(m)
         def prog(d):
@@ -157,6 +233,15 @@ class Downloader:
 
             def error(self, message):
                 log(f"❌ {message}")
+
+        try:
+            clip_start_seconds, clip_end_seconds = validate_request(
+                url, output_folder, mode, quality, video_quality, clip_start, clip_end
+            )
+        except ValueError as error:
+            if on_error:
+                on_error(str(error))
+            return
 
         try:
             import yt_dlp
@@ -189,9 +274,9 @@ class Downloader:
                 log(f"⚠️  SponsorBlock error: {e} — downloading full video")
 
         # ── Clip / Trim ───────────────────────────────────────────────────────
-        t_start    = _parse_time(clip_start)
-        t_end      = _parse_time(clip_end)
-        using_clip = bool(t_start or t_end)
+        t_start = _parse_time(clip_start)
+        t_end = _parse_time(clip_end)
+        using_clip = clip_start_seconds is not None or clip_end_seconds is not None
         if using_clip:
             log(f"✂️  Clip: {t_start or 'start'} → {t_end or 'end'}")
 
@@ -227,7 +312,7 @@ class Downloader:
         outtmpl = os.path.join(output_folder, tmpl + ".%(ext)s")
 
         def ydl_hook(d):
-            if self._cancel_flag:
+            if cancel_event.is_set():
                 raise Exception("Download cancelled by user.")
             status   = d.get("status", "")
             filename = os.path.basename(d.get("filename", ""))
@@ -237,27 +322,46 @@ class Downloader:
                 speed = d.get("speed", 0) or 0
                 eta   = d.get("eta",   0) or 0
                 pct   = (downloaded / total * 100) if total > 0 else 0
-                prog({
-                    "status": "downloading", "filename": filename,
-                    "percent": pct,
-                    "speed": f"{speed/1024:.1f} KB/s" if speed else "-- KB/s",
-                    "eta":   f"{eta}s" if eta else "--",
-                    "mode":  mode,
-                })
+                prog(ProgressUpdate(
+                    status=DownloadStatus.DOWNLOADING,
+                    filename=filename,
+                    percent=pct,
+                    speed=f"{speed/1024:.1f} KB/s" if speed else "-- KB/s",
+                    eta=f"{eta}s" if eta else "--",
+                    mode=mode,
+                ))
             elif status == "finished":
                 labels = {"mp3":"Converting→MP3","flac":"Converting→FLAC",
                           "wav":"Converting→WAV","mp4":"Merging video"}
                 log(f"✅ {labels.get(mode,'Processing')}: {filename}")
-                prog({"status":"converting","filename":filename,"percent":100,"mode":mode})
+                prog(ProgressUpdate(
+                    status=DownloadStatus.CONVERTING,
+                    filename=filename,
+                    percent=100,
+                    mode=mode,
+                ))
             elif status == "error":
                 log(f"❌ Error: {filename}")
 
         ffmpeg_dir = os.path.dirname(ffmpeg) if ffmpeg != "ffmpeg" else None
+        downloaded_files = set()
+
+        def postprocessor_hook(data):
+            if cancel_event.is_set():
+                raise Exception("Download cancelled by user.")
+            if data.get("status") != "finished":
+                return
+            info = data.get("info_dict") or {}
+            filepath = info.get("filepath") or data.get("filename")
+            if filepath:
+                downloaded_files.add(os.path.abspath(filepath))
+
         ydl_opts = {
             "format":        fmt,
             "outtmpl":       outtmpl,
             "postprocessors": pp,
             "progress_hooks": [ydl_hook],
+            "postprocessor_hooks": [postprocessor_hook],
             "quiet":         True,
             "no_warnings":   False,
             "logger":        YtdlpLogger(),
@@ -279,16 +383,17 @@ class Downloader:
                 None, sb_ranges)
             ydl_opts["force_keyframes_at_cuts"] = True
         elif using_clip:
-            s0 = _time_to_secs(t_start) if t_start else 0
-            e0 = _time_to_secs(t_end)   if t_end   else float("inf")
+            s0 = clip_start_seconds if clip_start_seconds is not None else 0
+            e0 = clip_end_seconds if clip_end_seconds is not None else float("inf")
             ydl_opts["download_ranges"] = yt_dlp.utils.download_range_func(
                 None, [(s0, e0)])
             ydl_opts["force_keyframes_at_cuts"] = True
 
         # ── Run download ──────────────────────────────────────────────────────
-        downloaded_files = []
-
         try:
+            if cancel_event.is_set():
+                if on_cancel: on_cancel()
+                return
             log("🔍 Fetching info...")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -300,13 +405,20 @@ class Downloader:
                     entries = [e for e in info.get("entries", []) if e]
                     total   = len(entries)
                     log(f"📂 Playlist: '{info.get('title')}' — {total} items")
+                    succeeded = 0
+                    failed = 0
                     for i, entry in enumerate(entries):
-                        if self._cancel_flag:
+                        if cancel_event.is_set():
                             log("⛔ Cancelled."); break
                         title = entry.get("title", f"Item {i+1}")
                         log(f"⬇️  [{i+1}/{total}] {title}")
-                        prog({"status":"playlist","current":i+1,
-                              "total":total,"title":title,"percent":0})
+                        prog(ProgressUpdate(
+                            status=DownloadStatus.PLAYLIST,
+                            current=i + 1,
+                            total=total,
+                            title=title,
+                            mode=mode,
+                        ))
                         try:
                             entry_url = entry.get("webpage_url") or entry.get("url")
                             if not entry_url:
@@ -314,15 +426,31 @@ class Downloader:
                             result = ydl.download([entry_url])
                             if result:
                                 raise RuntimeError(f"yt-dlp returned error code {result}")
+                            succeeded += 1
                         except Exception as e:
+                            if cancel_event.is_set():
+                                break
+                            failed += 1
                             log(f"⚠️  Skipped: {title} ({e})")
-                    if not self._cancel_flag:
+                    if cancel_event.is_set():
+                        if on_cancel: on_cancel()
+                    elif succeeded == 0:
+                        if on_error: on_error(f"Playlist failed: {failed} item(s) could not be downloaded")
+                    else:
                         ext_l = mode.upper()
-                        log(f"🎉 Playlist done! {total} {ext_l} files saved.")
-                        # Write metadata to folder after download
+                        if failed:
+                            log(f"⚠️  Playlist partially complete: {succeeded} saved, {failed} failed")
+                        else:
+                            log(f"🎉 Playlist done! {succeeded} {ext_l} files saved.")
                         if metadata and any(metadata.values()):
-                            self._write_folder_tags(output_folder, metadata, log)
-                        if on_complete: on_complete(total, info.get("title","Playlist"))
+                            self._write_file_tags(downloaded_files, metadata, log)
+                        if on_complete:
+                            on_complete(DownloadResult(
+                                count=succeeded,
+                                title=info.get("title", "Playlist"),
+                                succeeded=succeeded,
+                                failed=failed,
+                            ))
                 else:
                     title = info.get("title","Unknown")
                     log(f"⬇️  [{mode.upper()}] {title}")
@@ -330,21 +458,33 @@ class Downloader:
                     if result:
                         raise RuntimeError(f"yt-dlp returned error code {result}")
                     log(f"🎉 Done! Saved to: {output_folder}")
-                    # Write metadata to the file
                     if metadata and any(metadata.values()):
-                        self._write_folder_tags(output_folder, metadata, log)
-                    if on_complete: on_complete(1, title)
+                        self._write_file_tags(downloaded_files, metadata, log)
+                    if on_complete:
+                        on_complete(DownloadResult(count=1, title=title, succeeded=1))
 
         except Exception as e:
             if "cancelled" in str(e).lower():
                 log("⛔ Download cancelled.")
+                if on_cancel: on_cancel()
             else:
                 if on_error: on_error(str(e))
 
-    def _write_folder_tags(self, folder: str, tags: dict, log: Callable):
+    def _write_file_tags(self, paths, tags: dict, log: Callable):
         try:
-            from metadata_editor import write_tags_to_folder
-            count, errors = write_tags_to_folder(folder, tags)
+            from metadata_editor import write_tags
+            existing_paths = [path for path in paths if os.path.isfile(path)]
+            if not existing_paths:
+                log("⚠️  Could not identify the downloaded file; metadata was not applied")
+                return
+            count = 0
+            errors = []
+            for path in existing_paths:
+                error = write_tags(path, tags)
+                if error:
+                    errors.append(f"{os.path.basename(path)}: {error}")
+                else:
+                    count += 1
             if count:
                 log(f"🏷️  Tags written to {count} file(s)")
             for e in errors:

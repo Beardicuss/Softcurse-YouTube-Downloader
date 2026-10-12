@@ -9,9 +9,15 @@ import urllib.parse
 import urllib.error
 import json
 import hashlib
+import logging
+import math
+import re
 from typing import List, Tuple, Optional
+from urllib.parse import parse_qs, urlparse
 
 SPONSORBLOCK_API = "https://sponsor.ajay.app/api"
+MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+LOGGER = logging.getLogger(__name__)
 
 # Category labels for UI display
 CATEGORY_LABELS = {
@@ -31,13 +37,19 @@ DEFAULT_CATEGORIES = ["sponsor", "intro", "outro", "selfpromo", "interaction"]
 
 def _extract_video_id(url: str) -> Optional[str]:
     """Extract YouTube video ID from a URL."""
-    if "youtu.be/" in url:
-        vid = url.split("youtu.be/")[-1].split("?")[0].strip()
-        return vid if len(vid) == 11 else None
-    for param in ["v=", "video_id="]:
-        if param in url:
-            vid = url.split(param)[-1].split("&")[0].strip()
-            return vid if vid else None
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    video_id = None
+    if host in {"youtu.be", "www.youtu.be"}:
+        video_id = parsed.path.strip("/").split("/")[0]
+    elif host in {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"}:
+        if parsed.path == "/watch":
+            video_id = parse_qs(parsed.query).get("v", [None])[0]
+        elif parsed.path.startswith(("/shorts/", "/embed/", "/live/")):
+            parts = parsed.path.strip("/").split("/")
+            video_id = parts[1] if len(parts) > 1 else None
+    if video_id and re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+        return video_id
     return None
 
 
@@ -78,7 +90,15 @@ def fetch_segments(
             }
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode())
+            declared_size = resp.headers.get("Content-Length")
+            if declared_size and int(declared_size) > MAX_RESPONSE_BYTES:
+                raise ValueError("SponsorBlock response is too large")
+            payload = resp.read(MAX_RESPONSE_BYTES + 1)
+        if len(payload) > MAX_RESPONSE_BYTES:
+            raise ValueError("SponsorBlock response is too large")
+        data = json.loads(payload.decode())
+        if not isinstance(data, list):
+            raise ValueError("Unexpected SponsorBlock response")
 
         # API returns a list of video entries matching the hash prefix
         # Find ours by videoID
@@ -99,8 +119,10 @@ def fetch_segments(
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return [], video_id   # No segments found — normal
+        LOGGER.warning("SponsorBlock HTTP error %s", e.code)
         return [], video_id
-    except Exception:
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        LOGGER.warning("SponsorBlock request failed: %s", error)
         return [], video_id
 
 
@@ -116,18 +138,34 @@ def segments_to_keep_ranges(
     if not segments:
         return [(0, float("inf"))]
 
-    # Sort by start time
-    segs = sorted(segments, key=lambda s: s["start"])
+    end_time = total_duration if total_duration is not None else float("inf")
+    if end_time < 0 or math.isnan(end_time):
+        raise ValueError("total duration must be a non-negative number")
+    candidates = []
+    for segment in segments:
+        try:
+            start = max(0.0, float(segment["start"]))
+            end = min(end_time, float(segment["end"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not math.isfinite(start) or math.isnan(end) or end <= start:
+            continue
+        candidates.append((start, end))
 
-    end_time = total_duration if total_duration else float("inf")
+    normalized = []
+    for start, end in sorted(candidates):
+        if normalized and start <= normalized[-1][1]:
+            normalized[-1] = (normalized[-1][0], max(normalized[-1][1], end))
+        else:
+            normalized.append((start, end))
+
     keep = []
     cursor = 0.0
 
-    for seg in segs:
-        s, e = seg["start"], seg["end"]
-        if s > cursor:
-            keep.append((cursor, s))
-        cursor = max(cursor, e)
+    for start, end in normalized:
+        if start > cursor:
+            keep.append((cursor, start))
+        cursor = max(cursor, end)
 
     if cursor < end_time:
         keep.append((cursor, end_time))

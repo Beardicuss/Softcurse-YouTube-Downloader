@@ -1,35 +1,36 @@
-# How to Build the Windows Installer (.exe)
+# How to build the Windows installer
 
 ## Prerequisites
-1. **Inno Setup 6** — https://jrsoftware.org/isdl.php (free)
-2. **PyInstaller** — run `build_exe.bat` first to create the standalone `.exe`
-3. Optional: place `ffmpeg.exe` in the `ffmpeg/` folder to bundle it
 
-## Step-by-Step
+1. Windows 10 or 11, 64-bit.
+2. Python 3.10 or newer.
+3. Inno Setup 6 or 7.
+4. `ffmpeg.exe` in `../ffmpeg/` when producing a self-contained installer.
 
-### Step 1 — Build the standalone .exe
+The application version comes from `../VERSION`. Build dependencies are locked with
+hashes in `../requirements-lock.txt`.
+
+## Build
+
+From the repository root:
+
+```powershell
+.\build_exe.bat
+.\installer\build_installer.ps1
 ```
-build_exe.bat
-```
-This creates `dist/Softcurse_Media_Downloader.exe` using PyInstaller.
 
-### Step 2 — Build the installer
-Open Inno Setup Compiler and:
-- File → Open → select `installer/softcurse_installer.iss`
-- Press **Ctrl+F9** (Build) or click the green play button
-- Output: `installer/Output/Softcurse_Media_Downloader_v1.0_Setup.exe`
+The first command creates the application executable and its SHA-256 checksum in
+`dist/`. The second compiles the versioned installer and creates a matching checksum
+in `installer/Output/`.
 
-### What the installer does
-- Installs `Softcurse_Media_Downloader.exe` to `Program Files` (or user folder)
-- Optionally bundles `ffmpeg.exe` if present in `./ffmpeg/`
-- Creates Start Menu shortcut
-- Optional: Desktop shortcut, startup entry
-- Includes uninstaller
-- Shows feature list during installation
-- Offers to launch app after install
+## Release validation
 
-## Distribution
-The resulting `Softcurse_Media_Downloader_v1.0_Setup.exe` is:
-- A single self-contained installer (~15–30 MB with ffmpeg)
-- No Python required on end-user machine
-- Works on Windows 10/11 64-bit
+- Run `../verify.ps1` before building.
+- Test the packaged executable and installer on a clean Windows machine.
+- Confirm FFmpeg is reported as ready by the application's System Readiness screen.
+- Confirm install, upgrade, launch, update-check, and uninstall behavior.
+- Code-sign the executable and installer before publication when a signing certificate
+  is available.
+
+The installer uses per-user installation by default, creates optional desktop/startup
+shortcuts, and preserves user settings and history during uninstall.

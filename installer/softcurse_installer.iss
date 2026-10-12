@@ -1,6 +1,6 @@
 ; ─────────────────────────────────────────────────────────────────────────────
 ; Softcurse // Media Downloader v1.0 — Inno Setup Installer Script
-; Requires: Inno Setup 6+ (https://jrsoftware.org/isinfo.php)
+; Requires: Inno Setup 6 or 7 (https://jrsoftware.org/isinfo.php)
 ;
 ; HOW TO BUILD:
 ;   1. Install Inno Setup 6 from https://jrsoftware.org/isdl.php
@@ -10,10 +10,12 @@
 ;   4. Output: installer\Output\Softcurse_Media_Downloader_v1_Setup.exe
 ; ─────────────────────────────────────────────────────────────────────────────
 
+#define VersionFile FileOpen("..\VERSION")
+#define AppVersion Trim(FileRead(VersionFile))
+#expr FileClose(VersionFile)
 #define AppName      "Softcurse Media Downloader"
-#define AppVersion   "1.0"
 #define AppPublisher "Softcurse"
-#define AppURL       "https://softcurse.dev"
+#define AppURL       "https://softcurse-website.pages.dev/"
 #define AppExeName   "Softcurse_Media_Downloader.exe"
 #define AppIcon      "..\assets\yt.ico"
 
@@ -25,17 +27,21 @@ AppVersion={#AppVersion}
 AppVerName={#AppName} v{#AppVersion}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}
-AppUpdatesURL={#AppURL}
+AppUpdatesURL=https://github.com/Beardicuss/Softcurse-YouTube-Downloader/releases
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 AllowNoIcons=yes
 OutputDir=Output
-OutputBaseFilename=Softcurse_Media_Downloader_v1.0_Setup
+OutputBaseFilename=Softcurse_Media_Downloader_v{#AppVersion}_Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+CloseApplications=yes
+RestartApplications=no
 UninstallDisplayIcon={app}\{#AppExeName}
 ; Custom wizard colours (dark/neon theme)
 WizardSizePercent=120
@@ -95,7 +101,7 @@ var
   Lbl: TLabel;
   Memo: TMemo;
 begin
-  FeaturePage := CreateCustomPage(wpWelcome, 'Softcurse Media Downloader v1.0',
+  FeaturePage := CreateCustomPage(wpWelcome, 'Softcurse Media Downloader v{#AppVersion}',
     'What''s included in this release:');
 
   Lbl := TLabel.Create(FeaturePage);

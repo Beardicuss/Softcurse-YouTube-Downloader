@@ -6,6 +6,9 @@ import sys
 import os
 import multiprocessing
 
+from diagnostics import configure_logging
+from windows_platform import enable_high_dpi
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -27,6 +30,8 @@ def _already_running():
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+    configure_logging()
+    enable_high_dpi()
 
     if _already_running():
         sys.exit(0)

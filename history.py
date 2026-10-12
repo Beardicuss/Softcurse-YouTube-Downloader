@@ -3,30 +3,54 @@ history.py - Softcurse // Download History Manager
 Persists download records to ~/.softcurse_history.json
 """
 import json
+import logging
 import os
 import time
 from typing import List, Dict
 
-HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".softcurse_history.json")
+from storage import app_data_dir, atomic_write_json, preserve_corrupt_file
+
+LOGGER = logging.getLogger(__name__)
+LEGACY_HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".softcurse_history.json")
+HISTORY_FILE = os.path.join(app_data_dir(), "history.json")
 MAX_ENTRIES = 500
 
 
+def _migrate_legacy_history():
+    if os.path.exists(HISTORY_FILE) or not os.path.exists(LEGACY_HISTORY_FILE):
+        return
+    try:
+        with open(LEGACY_HISTORY_FILE, "r", encoding="utf-8") as file:
+            legacy = json.load(file)
+        if not isinstance(legacy, list):
+            raise ValueError("legacy history is not a list")
+        atomic_write_json(HISTORY_FILE, legacy[-MAX_ENTRIES:])
+        LOGGER.info("Migrated legacy history to %s", HISTORY_FILE)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        LOGGER.warning("Could not migrate legacy history: %s", error)
+
+
 def _load_raw() -> List[Dict]:
+    _migrate_legacy_history()
     if not os.path.exists(HISTORY_FILE):
         return []
     try:
         with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
+            loaded = json.load(f)
+        if not isinstance(loaded, list):
+            raise ValueError("history root must be a list")
+        return [entry for entry in loaded if isinstance(entry, dict)]
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        backup = preserve_corrupt_file(HISTORY_FILE)
+        LOGGER.warning("Malformed history ignored (%s); preserved at %s", error, backup)
         return []
 
 
 def _save_raw(entries: List[Dict]):
     try:
-        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(entries[-MAX_ENTRIES:], f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        print(f"[History] Save failed: {e}")
+        atomic_write_json(HISTORY_FILE, entries[-MAX_ENTRIES:])
+    except OSError as error:
+        LOGGER.error("History save failed: %s", error)
 
 
 def add_entry(title: str, url: str, mode: str, output_folder: str,
@@ -63,6 +87,17 @@ def add_failed_entry(url: str, mode: str, output_folder: str, error: str = ""):
 
 def load_history() -> List[Dict]:
     return list(reversed(_load_raw()))  # newest first
+
+
+def filter_history(entries, query: str):
+    query = query.strip().lower()
+    if not query:
+        return list(entries)
+    keys = ("title", "url", "mode", "status", "folder")
+    return [
+        entry for entry in entries
+        if query in " ".join(str(entry.get(key, "")) for key in keys).lower()
+    ]
 
 
 def clear_history():

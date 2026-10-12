@@ -1,0 +1,6 @@
+-r requirements.txt
+mutagen>=1.47.0
+pygame>=2.5.0
+pyinstaller>=6.0,<7
+coverage>=7.6,<8
+ruff>=0.9,<1

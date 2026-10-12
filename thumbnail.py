@@ -6,6 +6,7 @@ import threading
 import urllib.request
 import io
 import os
+from urllib.parse import urlparse
 from typing import Callable
 
 # Pillow is optional — thumbnail display degrades gracefully
@@ -42,6 +43,7 @@ def fetch_info_and_thumb(
     on_thumb: Callable,  # called with ImageTk.PhotoImage (or None)
     on_error: Callable,  # called with str
     thumb_size: tuple = (160, 90),
+    max_thumb_bytes: int = 5 * 1024 * 1024,
 ):
     """Fetch video info and thumbnail asynchronously."""
     def worker():
@@ -104,12 +106,20 @@ def fetch_info_and_thumb(
             # Fetch thumbnail image
             if thumb_url and PIL_AVAILABLE:
                 try:
+                    parsed_thumb = urlparse(thumb_url)
+                    if parsed_thumb.scheme not in {"http", "https"}:
+                        raise ValueError("Unsupported thumbnail URL")
                     req = urllib.request.Request(
                         thumb_url,
                         headers={"User-Agent": "Mozilla/5.0"}
                     )
                     with urllib.request.urlopen(req, timeout=8) as resp:
-                        data = resp.read()
+                        declared_size = resp.headers.get("Content-Length")
+                        if declared_size and int(declared_size) > max_thumb_bytes:
+                            raise ValueError("Thumbnail is too large")
+                        data = resp.read(max_thumb_bytes + 1)
+                    if len(data) > max_thumb_bytes:
+                        raise ValueError("Thumbnail is too large")
                     img = Image.open(io.BytesIO(data))
                     img = img.convert("RGB")
                     img.thumbnail(thumb_size, Image.LANCZOS)

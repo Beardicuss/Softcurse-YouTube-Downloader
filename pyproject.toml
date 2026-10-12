@@ -1,0 +1,39 @@
+[project]
+name = "softcurse-media-downloader"
+version = "1.0.0"
+description = "Windows desktop media downloader and converter"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+    "yt-dlp>=2024.1.0",
+    "Pillow>=10.0.0",
+    "pystray>=0.19.0",
+    "plyer>=2.1.0",
+]
+
+[project.optional-dependencies]
+media = ["mutagen>=1.47.0", "pygame>=2.5.0"]
+dev = ["coverage>=7.6,<8", "ruff>=0.9,<1"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+exclude = ["build", "dist"]
+
+[tool.ruff.lint]
+# Start with rules that catch invalid or very likely broken Python. Broader style
+# and modernization rules will be enabled as the existing baseline is cleaned up.
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.coverage.run]
+branch = true
+source = ["."]
+omit = ["build/*", "dist/*", "test_*.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+# This is the measured whole-application baseline. Raise it as the download
+# service and UI controllers become independently testable.
+fail_under = 22

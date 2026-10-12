@@ -15,22 +15,13 @@ import random
 import math
 import time
 
-#  Palette  SOFTCURSE/SYS 
-BG          = "#020202"       # Void Black
-CYAN        = "#00ffff"       # Primary Accent
-CYAN_DIM    = "#007373"       # Dim Aqua
-CYAN_DARK   = "#001a1a"       # Deep teal
-DARK_PANEL  = "#050810"       # Abyss Glass
-MAGENTA     = "#ff00ff"       # Glitch/Alert
-MAGENTA_DIM = "#660066"
-WHITE       = "#e8f4f8"       # Ice White
-TEXT_DIM    = "#004a4a"       # Deep dim labels
-SUCCESS     = "#00e676"       # Success green
-ERROR       = "#ff5252"       # Error red
-BLUE        = "#0088ff"       # Neon Blue
-ORANGE      = "#ff6b35"       # Electric Orange
-GRID_COLOR  = "#001f1f"       # Ghost cyan grid
-FONT_MONO   = "Consolas"
+from ui_theme import (
+    BG, BLUE, CARD, CARD_BORDER, CYAN, CYAN_DARK, CYAN_DIM, ERROR,
+    FONT_MONO, MAGENTA, MAGENTA_DIM, ORANGE, SUCCESS, TEXT_DIM, WHITE,
+)
+
+DARK_PANEL = CARD
+GRID_COLOR = CARD_BORDER
 
 AUDIO_EXTS = (".mp3", ".flac", ".wav", ".ogg", ".opus", ".m4a", ".aac")
 
@@ -115,7 +106,6 @@ class AudioPlayer:
             self._ensure_init()
             self._mixer.music.stop()
             self._paused = False
-            self._loaded = False
         except Exception:
             pass
 
@@ -250,24 +240,27 @@ class PlayerPanel(tk.Frame):
         ctrl.pack(fill="x", pady=(0,4))
 
         btn_specs = [
-            ("",  self._prev,        CYAN),
-            ("",   self._play_pause,  CYAN),
-            ("",  self._stop,        CYAN),
-            ("",  self._next,        CYAN),
-            ("",  self._shuffle,     MAGENTA_DIM),
+            ("|<",   self._prev,       CYAN,        "Previous track"),
+            ("PLAY", self._play_pause, CYAN,        "Play or pause"),
+            ("STOP", self._stop,       CYAN,        "Stop playback"),
+            (">|",   self._next,       CYAN,        "Next track"),
+            ("MIX",  self._shuffle,    MAGENTA_DIM, "Shuffle playlist"),
         ]
         self._play_btn = None
-        for sym, cmd, color in btn_specs:
+        for sym, cmd, color, description in btn_specs:
             b = tk.Button(ctrl, text=sym, command=cmd,
                           fg=color, bg=DARK_PANEL,
                           activeforeground=BG, activebackground=color,
                           font=(FONT_MONO,14), relief="flat", bd=0,
-                          width=3, cursor="hand2",
+                          width=max(4, len(sym)), cursor="hand2",
                           highlightthickness=1, highlightbackground=color)
+            b.configure(takefocus=True)
+            b.bind("<Return>", lambda event, command=cmd: command())
+            b.bind("<space>", lambda event, command=cmd: command())
             b.bind("<Enter>", lambda e,b=b,c=color: b.config(bg=c,fg=BG))
             b.bind("<Leave>", lambda e,b=b,c=color: b.config(bg=DARK_PANEL,fg=c))
             b.pack(side="left", padx=3)
-            if sym == "":
+            if description == "Play or pause":
                 self._play_btn = b
 
         # Volume
@@ -311,11 +304,11 @@ class PlayerPanel(tk.Frame):
             b.bind("<Leave>", lambda e,b=b,c=col: b.config(bg=DARK_PANEL,fg=c))
             b.pack(side="right", padx=(4,0))
 
-        pl_list_frame = tk.Frame(pl_inner, bg="#0a1a1a")
+        pl_list_frame = tk.Frame(pl_inner, bg=BG)
         pl_list_frame.pack(fill="both", expand=True, padx=6, pady=(0,6))
         self.pl_listbox = tk.Listbox(pl_list_frame,
-            bg="#0a1a1a", fg=CYAN_DIM,
-            selectbackground="#0a3333", selectforeground=CYAN,
+            bg=BG, fg=CYAN_DIM,
+            selectbackground=CYAN_DARK, selectforeground=CYAN,
             font=(FONT_MONO,10), relief="flat", bd=0,
             highlightthickness=0, activestyle="none",
             height=7)
@@ -397,47 +390,50 @@ class PlayerPanel(tk.Frame):
             return
         if self._player.is_playing():
             self._player.pause()
-            self._play_btn.config(text="")
+            self._play_btn.config(text="PLAY")
         elif self._player.is_paused():
             self._player.play()
-            self._play_btn.config(text="")
+            self._play_btn.config(text="PAUSE")
         else:
             if self._pl_index < 0 and self._playlist:
-                self._load_index(0)
+                self._load_index(0, auto_play=True)
             elif self._pl_index >= 0:
                 self._player.play()
-                self._play_btn.config(text="")
+                self._play_btn.config(text="PAUSE")
 
     def _stop(self):
         if not self._pygame_ok: return
         self._player.stop()
-        self._play_btn.config(text="")
+        self._play_btn.config(text="PLAY")
         self._pos_var.set(0)
         self.time_cur.config(text="0:00")
 
     def _prev(self):
         if self._playlist and self._pl_index > 0:
-            self._load_index(self._pl_index - 1)
+            self._load_index(self._pl_index - 1, auto_play=True)
 
     def _next(self):
         if self._playlist and self._pl_index < len(self._playlist) - 1:
-            self._load_index(self._pl_index + 1)
+            self._load_index(self._pl_index + 1, auto_play=True)
 
     def _shuffle(self):
         if self._playlist:
             random.shuffle(self._playlist)
             self._refresh_listbox()
-            self._load_index(0)
+            self._load_index(0, auto_play=True)
 
-    def _load_index(self, idx: int):
+    def _load_index(self, idx: int, auto_play: bool = False):
         if not self._pygame_ok: return
         if idx < 0 or idx >= len(self._playlist): return
         self._pl_index = idx
         path = self._playlist[idx]
         if self._player.load(path):
             self._player.set_volume(self._vol)
-            self._player.play()
-            self._play_btn.config(text="")
+            if auto_play:
+                self._player.play()
+                self._play_btn.config(text="PAUSE")
+            else:
+                self._play_btn.config(text="PLAY")
             name = os.path.splitext(os.path.basename(path))[0]
             self._playing_title.set(name)
             # Try metadata
@@ -513,7 +509,7 @@ class PlayerPanel(tk.Frame):
         self._playlist.extend(paths)
         self._refresh_listbox()
         if self._pl_index < 0 and self._playlist:
-            self._load_index(0)
+            self._load_index(0, auto_play=False)
 
     def load_file(self, path: str):
         """Load a single file from external code (e.g. after download)."""
@@ -521,7 +517,7 @@ class PlayerPanel(tk.Frame):
             self._playlist.append(path)
             self._refresh_listbox()
             if self._pl_index < 0:
-                self._load_index(len(self._playlist) - 1)
+                self._load_index(len(self._playlist) - 1, auto_play=False)
 
     def load_folder(self, folder: str):
         """Load all audio files from a folder (called after playlist download)."""
@@ -544,7 +540,7 @@ class PlayerPanel(tk.Frame):
         self.time_tot.config(text="0:00")
         self._pos_var.set(0)
         if self._play_btn:
-            self._play_btn.config(text="")
+            self._play_btn.config(text="PLAY")
 
     def _refresh_listbox(self):
         self.pl_listbox.delete(0, "end")
@@ -555,7 +551,7 @@ class PlayerPanel(tk.Frame):
     def _on_pl_double_click(self, event):
         sel = self.pl_listbox.curselection()
         if sel:
-            self._load_index(sel[0])
+            self._load_index(sel[0], auto_play=True)
 
     #  Poll (update seek bar while playing) 
     def _start_poll(self):
