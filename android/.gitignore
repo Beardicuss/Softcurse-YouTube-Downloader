@@ -1,0 +1,15 @@
+.gradle/
+.idea/
+build/
+*/build/
+local.properties
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Release signing secrets
+keystore.properties
+keystores/
+*.jks
+*.keystore

@@ -17,7 +17,30 @@ The work is intentionally divided into milestones. Each milestone should leave t
   history filtering, responsive polish, and first-run diagnostics are complete.
 - Phase 5 packaging, updates, and Windows release: complete for unsigned release
   candidates; code signing and clean-machine acceptance remain release-operator steps.
-- Next: Phase 6 optional Windows feature upgrades, or begin the Android decision gate.
+- Windows clean-machine acceptance testing: postponed at the user's request.
+- Android Phase A decision gate: complete for the initial GitHub-distributed,
+  on-device proof-of-concept direction.
+- Android Phase B foundation: complete; the Compose shell, responsive navigation,
+  shared HEX theme, URL validation, Room queue/history, DataStore settings,
+  foreground WorkManager simulation, unit tests, CI, and debug build are complete.
+- Android Phase B emulator validation: complete on Android 16/API 36 at phone and
+  tablet widths; cold launch, simulated work, history persistence, and responsive
+  navigation passed without runtime crashes.
+- Android Phase C proof-of-concept code: implemented behind an opt-in setting using
+  bundled yt-dlp and non-GPL FFmpeg. ARM64 installation, foreground execution,
+  real MP4 download, MP3 conversion, MediaStore export, and failed-download cleanup
+  pass on an Android 11 Redmi Note 8 Pro; cancellation and lifecycle stress gates remain.
+- Android scoped-storage export: implemented for Android 10+ through MediaStore;
+  Android 8–9 deliberately retain app-specific output without broad storage access.
+- Android visual identity pass: in progress; the installed application and APK now use
+  the Softcurse Systems Media Downloader name and established MP3/MP4 logo. The Compose
+  shell includes an animated motherboard/neural circuit background: red while idle and
+  sequentially green while queue work is pending or running, with a static reduced-motion mode.
+- Cancellation, process-death, network-loss/retry, storage-exhaustion, Wi-Fi-only,
+  thermal, battery, and MP3/MP4 playback testing have passed on connected ARM64 hardware.
+  In-app release identity, privacy, permission disclosure, responsible-use guidance, and
+  third-party/license presentation are implemented and validated on ARM64 hardware. Next:
+  configure signed release APK/AAB, shrinking rules, and reproducible CI artifacts.
 
 ## Guiding principles
 
@@ -250,8 +273,16 @@ Do not assume the Python desktop engine can simply be copied into an Android app
 
 - Prototype the chosen extraction approach behind the engine interface.
 - Test MP3 and MP4 paths on several Android API levels and device architectures.
-- Verify cancellation, process death, network loss, storage exhaustion, and resume behavior.
-- Validate FFmpeg performance, thermal impact, battery use, and binary size.
+- Verify network loss and resume behavior. Network loss now produces an actionable failure,
+  cleans partial files, and supports same-record retry without duplicate output; Wi-Fi-only
+  work remains pending on cellular and starts when Wi-Fi returns. Reliable cancellation, process-death recovery,
+  and storage-exhaustion handling have passed physical ARM64 validation, including
+  stable-ID restart, Room/WorkManager reconciliation, capacity gates, scoped cleanup,
+  and protection against late native callbacks.
+- Android 13+ notification permission grant, denial, retry, cold-restart persistence,
+  and foreground progress display passed on the API 36 emulator.
+- Validate FFmpeg performance, thermal impact, battery use, and binary size. ARM64 thermal
+  and battery sampling passed with thermal status 0; the current debug APK is about 66.9 MB.
 - Implement scoped-storage output through Android-supported APIs.
 - Add clear error handling for unsupported or restricted media.
 
