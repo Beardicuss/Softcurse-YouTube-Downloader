@@ -8,6 +8,8 @@ import com.softcurse.downloader.data.AppSettings
 import com.softcurse.downloader.domain.DownloadRequest
 import com.softcurse.downloader.domain.MediaFormat
 import com.softcurse.downloader.domain.QueueItem
+import com.softcurse.downloader.domain.SourcePreview
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -33,6 +35,10 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         SharingStarted.WhileSubscribed(5_000),
         AppSettings(),
     )
+    val crashReport: StateFlow<String?> = container.crashReports.latestReport
+
+    private val _sourceInspection = MutableStateFlow<SourceInspectionState>(SourceInspectionState.Idle)
+    val sourceInspection: StateFlow<SourceInspectionState> = _sourceInspection
 
     fun enqueue(request: DownloadRequest) = viewModelScope.launch {
         container.downloads.enqueue(
@@ -40,6 +46,49 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             settings.value.wifiOnly,
             settings.value.experimentalEngine,
         )
+    }
+
+    fun inspectAndEnqueue(request: DownloadRequest) = viewModelScope.launch {
+        _sourceInspection.value = SourceInspectionState.Inspecting
+        runCatching { container.playlists.inspect(request.url) }
+            .onSuccess { preview ->
+                if (preview.isPlaylist) {
+                    _sourceInspection.value = SourceInspectionState.PlaylistReady(request, preview)
+                } else {
+                    val entry = preview.entries.single()
+                    container.downloads.enqueue(
+                        request.copy(url = entry.url, title = entry.title),
+                        settings.value.wifiOnly,
+                        settings.value.experimentalEngine,
+                    )
+                    _sourceInspection.value = SourceInspectionState.Enqueued(1)
+                }
+            }
+            .onFailure { error ->
+                _sourceInspection.value = SourceInspectionState.Failed(
+                    error.message ?: "Could not inspect this media link",
+                )
+            }
+    }
+
+    fun enqueuePlaylist(selectedMediaIds: Set<String>) = viewModelScope.launch {
+        val state = _sourceInspection.value as? SourceInspectionState.PlaylistReady ?: return@launch
+        if (selectedMediaIds.isEmpty()) {
+            _sourceInspection.value = SourceInspectionState.Failed("Select at least one playlist entry")
+            return@launch
+        }
+        val count = container.downloads.enqueuePlaylist(
+            state.request,
+            state.preview,
+            selectedMediaIds,
+            settings.value.wifiOnly,
+            settings.value.experimentalEngine,
+        )
+        _sourceInspection.value = SourceInspectionState.Enqueued(count)
+    }
+
+    fun clearSourceInspection() {
+        _sourceInspection.value = SourceInspectionState.Idle
     }
 
     fun cancel(id: String) = viewModelScope.launch { container.downloads.cancel(id) }
@@ -64,6 +113,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         container.settings.setExperimentalEngine(value)
     }
 
+    fun clearCrashReport() = container.crashReports.clear()
+
     companion object {
         fun factory(container: AppContainer): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
@@ -72,4 +123,12 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     AppViewModel(container) as T
             }
     }
+}
+
+sealed interface SourceInspectionState {
+    data object Idle : SourceInspectionState
+    data object Inspecting : SourceInspectionState
+    data class PlaylistReady(val request: DownloadRequest, val preview: SourcePreview) : SourceInspectionState
+    data class Enqueued(val count: Int) : SourceInspectionState
+    data class Failed(val message: String) : SourceInspectionState
 }

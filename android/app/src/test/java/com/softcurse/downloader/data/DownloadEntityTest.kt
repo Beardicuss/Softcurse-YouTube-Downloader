@@ -19,7 +19,7 @@ class DownloadEntityTest {
         val entity = request.toEntity(now = 123L)
         val restored = entity.toDomain()
 
-        assertEquals(2, entity.schemaVersion)
+        assertEquals(3, entity.schemaVersion)
         assertEquals(request, restored.request)
         assertEquals(DownloadState.Pending, restored.state)
         assertEquals(0, restored.progress)

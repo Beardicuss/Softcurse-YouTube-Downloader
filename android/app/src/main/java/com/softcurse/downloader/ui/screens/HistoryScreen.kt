@@ -34,7 +34,14 @@ fun HistoryScreen(items: List<QueueItem>, onRetry: (String) -> Unit) {
                         StatusPill(item.state.name, color)
                         Text("${item.request.format.label} // ${item.request.quality}", color = HexCyan, style = MaterialTheme.typography.labelLarge)
                     }
-                    Text(item.request.url, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    item.request.playlistTitle?.let { playlist ->
+                        Text(
+                            "$playlist // ${item.request.playlistIndex}/${item.request.playlistCount}",
+                            color = HexTextMuted,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                    Text(item.request.title ?: item.request.url, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     item.errorMessage?.let { Text(it, color = HexCoral, style = MaterialTheme.typography.bodyMedium) }
                     Text("NODE ${item.request.id.take(8).uppercase()}", color = HexTextMuted, style = MaterialTheme.typography.labelSmall)
                     if (item.state == DownloadState.Failed) {

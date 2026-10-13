@@ -20,6 +20,11 @@ data class DownloadEntity(
     val schemaVersion: Int = 2,
     val errorMessage: String? = null,
     val outputPath: String? = null,
+    val title: String? = null,
+    val playlistId: String? = null,
+    val playlistTitle: String? = null,
+    val playlistIndex: Int? = null,
+    val playlistCount: Int? = null,
 )
 
 fun DownloadEntity.toDomain() = QueueItem(
@@ -28,6 +33,11 @@ fun DownloadEntity.toDomain() = QueueItem(
         url = url,
         format = MediaFormat.entries.firstOrNull { it.name == format } ?: MediaFormat.Mp3,
         quality = quality,
+        title = title,
+        playlistId = playlistId,
+        playlistTitle = playlistTitle,
+        playlistIndex = playlistIndex,
+        playlistCount = playlistCount,
     ),
     state = DownloadState.entries.firstOrNull { it.name == state } ?: DownloadState.Failed,
     progress = progress,
@@ -44,4 +54,10 @@ fun DownloadRequest.toEntity(now: Long = System.currentTimeMillis()) = DownloadE
     progress = 0,
     createdAt = now,
     updatedAt = now,
+    schemaVersion = 3,
+    title = title,
+    playlistId = playlistId,
+    playlistTitle = playlistTitle,
+    playlistIndex = playlistIndex,
+    playlistCount = playlistCount,
 )

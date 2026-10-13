@@ -16,13 +16,13 @@ Phase B foundation (`0.1.0`):
 - Room-backed queue and history with a versioned schema
 - DataStore preferences for default format, Wi-Fi-only jobs and reduced motion
 - Foreground WorkManager simulation with progress, cancellation and notifications
-- Opt-in on-device yt-dlp/FFmpeg proof of concept for ARM64 and x86_64
-- Download-engine interface ready for a proof of concept
-- Unit tests for URL validation
+- Opt-in on-device yt-dlp/FFmpeg engine for ARM64 and x86_64 with runtime yt-dlp updates
+- Selectable YouTube playlist discovery and per-entry queue/history records
+- Unit tests for URL validation, persistence, playlist parsing, and worker failure handling
 
 The safe default worker simulates progress. Settings contains an explicitly experimental
-on-device engine using bundled yt-dlp and FFmpeg. It must pass the promotion gate documented in
-`docs/ANDROID_ENGINE_POC.md` on real devices before becoming the default.
+on-device engine using updateable yt-dlp and bundled FFmpeg. Its reliability gates and remaining
+promotion work are documented in `docs/ANDROID_ENGINE_POC.md` and the repository modernization plan.
 
 ## Build
 
@@ -37,7 +37,7 @@ The local development SDK used by this repository is API 36.
 ## Initial flow
 
 ```text
-Download -> validate link -> persist request -> foreground simulated worker -> Queue
+Download -> inspect link/playlist -> persist selected entries -> foreground worker -> Queue
 Queue -> progress or cancel -> persisted History
 Settings -> persisted download preferences
 Player -> foundation placeholder
@@ -45,3 +45,10 @@ Player -> foundation placeholder
 
 On phones the primary destinations use bottom navigation. On tablets and wide windows the
 same destinations move to a navigation rail.
+
+## Privacy and support
+
+The application stores its queue, history, settings, and latest crash report locally. Support
+messages and reviewed crash reports are sent only after the user taps Send in the native form.
+Formspree relays those submissions to `softcursesystems@gmail.com`; media URLs and queue contents
+are not included.

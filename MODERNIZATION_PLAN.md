@@ -39,8 +39,22 @@ The work is intentionally divided into milestones. Each milestone should leave t
 - Cancellation, process-death, network-loss/retry, storage-exhaustion, Wi-Fi-only,
   thermal, battery, and MP3/MP4 playback testing have passed on connected ARM64 hardware.
   In-app release identity, privacy, permission disclosure, responsible-use guidance, and
-  third-party/license presentation are implemented and validated on ARM64 hardware. Next:
-  configure signed release APK/AAB, shrinking rules, and reproducible CI artifacts.
+  third-party/license presentation are implemented and validated on ARM64 hardware.
+  Signed APK/AAB generation, R8 shrinking, GitHub release artifacts, and reproducible
+  Android CI are complete. Playlist support, privacy-conscious crash reporting,
+  and an in-app support contact flow are implemented.
+- Android Phase F playlist foundation is implemented and installed as a signed release
+  candidate: source inspection, a selectable preview capped at 100 entries, deterministic
+  per-entry queue IDs, persisted playlist metadata, Room v2-to-v3 migration, and one-file-per-job
+  enforcement are complete. Physical testing with a three-entry YouTube playlist verified
+  discovery, selection, distinct MP3/MP4 records, all six MP3/MP4 exports, useful failure
+  states, retry recovery, duplicate-safe re-enqueueing, and partial-file cleanup. The fixed
+  extractor was replaced with an independently updateable yt-dlp runtime after YouTube
+  PO-token changes caused HTTP 403 errors.
+- Android local diagnostics and native support submission are implemented: the latest crash is
+  capped and retained only in private storage, reports require review before user-initiated
+  submission, deletion is available in Settings, and Formspree delivers approved messages to
+  `softcursesystems@gmail.com` without opening another app.
 
 ## Guiding principles
 
@@ -313,6 +327,44 @@ Do not assume the Python desktop engine can simply be copied into an Android app
 - Minimize permissions and document every requested permission.
 - Configure signing, release builds, obfuscation rules, crash reporting choice, and reproducible CI builds.
 - Run internal testing, closed testing, and staged rollout as applicable.
+
+## Phase F - Android playlists, diagnostics, and support
+
+### Playlist downloads
+
+- Detect playlist URLs and extract playlist metadata before scheduling downloads.
+- Expand each playlist entry into its own persistent queue record with a stable ID and
+  unique collision-safe output filename.
+- Show playlist title, completed/failed/skipped counts, aggregate progress, and partial
+  completion rather than treating the playlist as a single media file.
+- Support cancel/retry for one entry or the whole playlist without duplicating completed
+  files or corrupting Room/WorkManager state.
+- Bound very large playlists, show the entry count before enqueueing, and let the user
+  select all or individual entries.
+- Add regression tests for mixed-success playlists, duplicate entries, cancellation,
+  process death, storage exhaustion, and network loss during multi-entry downloads.
+
+### Crash reports
+
+- Implemented without an external provider: only the latest uncaught crash is retained in
+  private app storage, capped at 64 KiB, and nothing is transmitted automatically.
+- Reports exclude queue contents and media URLs and contain only app/Android versions,
+  device model, failing thread, and exception stack trace.
+- Settings provides explicit review, delete, and user-initiated email actions. The privacy
+  disclosure documents the complete local flow.
+
+### Write to Support
+
+- Settings now opens a composed email to `softcursesystems@gmail.com` with a user-editable
+  issue template, app version, Android version, and device model.
+- Crash details are included only from the separate review dialog after explicit user action.
+- No website or external crash-reporting account is required.
+
+### Exit criteria
+
+- Playlists create independent, recoverable queue entries and report partial success accurately.
+- Crash reporting is consent-aware, privacy-reviewed, redacted, and verified in a release build.
+- Users can contact support with a clear preview of exactly what information will be shared.
 
 ---
 

@@ -35,7 +35,7 @@ internal data class OpenSourceComponent(
 internal val openSourceComponents = listOf(
     OpenSourceComponent("AndroidX, Jetpack Compose & Material", "Apache License 2.0", "https://source.android.com/docs/setup/about/licenses", "UI, lifecycle, Room, DataStore and WorkManager foundations."),
     OpenSourceComponent("Kotlin", "Apache License 2.0", "https://github.com/JetBrains/kotlin", "Application language and coroutines runtime."),
-    OpenSourceComponent("yt-dlp-android wrapper", "MIT License", "https://github.com/yausername/youtubedl-android", "Android extraction wrapper and embedded Python integration."),
+    OpenSourceComponent("youtubedl-android", "GNU GPL v3", "https://github.com/yausername/youtubedl-android", "Android extraction wrapper, update mechanism, and embedded Python integration."),
     OpenSourceComponent("yt-dlp", "The Unlicense", "https://github.com/yt-dlp/yt-dlp", "Media information extraction and source download engine."),
     OpenSourceComponent("CPython", "Python Software Foundation License 2.0", "https://docs.python.org/3/license.html", "Embedded Python runtime used by the extraction engine."),
     OpenSourceComponent("FFmpegKit maintained audio build", "LGPL v3", "https://github.com/arthenica/ffmpeg-kit", "Non-GPL audio conversion package. This app does not use a GPL build."),
@@ -68,8 +68,10 @@ fun AboutScreen(onBack: () -> Unit) {
             title = "PRIVACY // ON-DEVICE BY DEFAULT",
             accent = HexSignalGreen,
             paragraphs = listOf(
-                "Effective 13 October 2026. The app has no account system, advertising, analytics, tracking, telemetry, or crash-reporting service.",
-                "URLs, download state, history, output references, and preferences are stored locally on this device. Extraction and audio conversion run on-device.",
+                "Effective 14 October 2026. The app has no account system, advertising, analytics, tracking, telemetry, or automatic crash-reporting service.",
+                "URLs, download state, history, output references, preferences, and the latest crash report are stored locally on this device. Extraction and audio conversion run on-device.",
+                "A saved crash report contains app and Android versions, device model, failing thread, and the exception stack trace. It excludes queue contents and media URLs. Nothing is transmitted automatically: you can review, delete, or explicitly send it to Softcurse Systems.",
+                "Write to Support uses a user-editable in-app form. When you tap Send, the message and disclosed diagnostics are transmitted securely through Formspree to Softcurse Systems. An optional reply address is sent only when you enter one.",
                 "When you start a transfer, the app connects to the URL and services required by that source, which may include the source website or its media/CDN providers. Those services receive ordinary network information such as your IP address and are governed by their own policies.",
                 "Completed files are written to Download/Softcurse through Android MediaStore. Uninstalling the app removes its private database and settings but does not automatically remove exported downloads.",
                 "The app does not request broad storage access. Notification access is optional and is used only for background download status.",

@@ -10,12 +10,15 @@ import androidx.work.workDataOf
 import com.softcurse.downloader.domain.DownloadRequest
 import com.softcurse.downloader.domain.DownloadState
 import com.softcurse.downloader.domain.QueueItem
+import com.softcurse.downloader.domain.SourcePreview
 import com.softcurse.downloader.worker.FakeDownloadWorker
 import com.softcurse.downloader.worker.OnDeviceDownloadWorker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.nio.charset.StandardCharsets
+import java.util.UUID
 
 class DownloadRepository(
     private val dao: DownloadDao,
@@ -27,6 +30,45 @@ class DownloadRepository(
     suspend fun enqueue(request: DownloadRequest, wifiOnly: Boolean, experimentalEngine: Boolean) {
         dao.upsert(request.toEntity())
         schedule(request.id, wifiOnly, experimentalEngine)
+    }
+
+    suspend fun enqueuePlaylist(
+        template: DownloadRequest,
+        preview: SourcePreview,
+        selectedMediaIds: Set<String>,
+        wifiOnly: Boolean,
+        experimentalEngine: Boolean,
+    ): Int {
+        val selected = preview.entries.filter { it.mediaId in selectedMediaIds }
+        var scheduled = 0
+        selected.forEach { entry ->
+            val request = template.copy(
+                    id = playlistEntryId(preview.playlistId ?: preview.sourceUrl, entry.mediaId, template),
+                    url = entry.url,
+                    title = entry.title,
+                    playlistId = preview.playlistId ?: preview.sourceUrl,
+                    playlistTitle = preview.title,
+                    playlistIndex = entry.index,
+                    playlistCount = preview.entries.size,
+                )
+            when (dao.find(request.id)?.state) {
+                DownloadState.Complete.name,
+                DownloadState.Pending.name,
+                DownloadState.Running.name,
+                -> Unit
+                DownloadState.Failed.name,
+                DownloadState.Cancelled.name,
+                -> {
+                    retry(request.id, wifiOnly, experimentalEngine)
+                    scheduled++
+                }
+                else -> {
+                    enqueue(request, wifiOnly, experimentalEngine)
+                    scheduled++
+                }
+            }
+        }
+        return scheduled
     }
 
     suspend fun retry(id: String, wifiOnly: Boolean, experimentalEngine: Boolean) {
@@ -83,5 +125,12 @@ internal fun hasRecoverableWork(states: List<WorkInfo.State>): Boolean = states.
 class AppContainer(context: Context) {
     private val database = SoftcurseDatabase.get(context)
     val settings = SettingsStore(context)
+    val crashReports = CrashReportStore(context.applicationContext)
+    val playlists = PlaylistResolver(context.applicationContext)
     val downloads = DownloadRepository(database.downloadDao(), WorkManager.getInstance(context))
 }
+
+internal fun playlistEntryId(playlistId: String, mediaId: String, request: DownloadRequest): String =
+    UUID.nameUUIDFromBytes(
+        "$playlistId|$mediaId|${request.format.name}|${request.quality}".toByteArray(StandardCharsets.UTF_8),
+    ).toString()

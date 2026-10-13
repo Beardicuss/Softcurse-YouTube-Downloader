@@ -23,7 +23,29 @@ data class DownloadRequest(
     val url: String,
     val format: MediaFormat,
     val quality: String,
+    val title: String? = null,
+    val playlistId: String? = null,
+    val playlistTitle: String? = null,
+    val playlistIndex: Int? = null,
+    val playlistCount: Int? = null,
 )
+
+data class PlaylistEntry(
+    val mediaId: String,
+    val title: String,
+    val url: String,
+    val index: Int,
+)
+
+data class SourcePreview(
+    val sourceUrl: String,
+    val playlistId: String?,
+    val title: String,
+    val entries: List<PlaylistEntry>,
+    val truncated: Boolean = false,
+) {
+    val isPlaylist: Boolean get() = playlistId != null || entries.size > 1
+}
 
 data class QueueItem(
     val request: DownloadRequest,

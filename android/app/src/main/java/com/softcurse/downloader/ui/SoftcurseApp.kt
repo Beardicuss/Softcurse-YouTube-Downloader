@@ -43,7 +43,16 @@ fun SoftcurseApp(
     val queue by viewModel.downloads.collectAsState()
     val history by viewModel.history.collectAsState()
     val settings by viewModel.settings.collectAsState()
+    val sourceInspection by viewModel.sourceInspection.collectAsState()
+    val crashReport by viewModel.crashReport.collectAsState()
     val downloadActive = queue.any { it.state == DownloadState.Pending || it.state == DownloadState.Running }
+
+    LaunchedEffect(sourceInspection) {
+        if (sourceInspection is SourceInspectionState.Enqueued) {
+            destination = Destination.Queue
+            viewModel.clearSourceInspection()
+        }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(HexBackground)) {
         CircuitBoardBackground(downloadActive, settings.reducedMotion, Modifier.fillMaxSize())
@@ -61,11 +70,17 @@ fun SoftcurseApp(
                     AppHeader(destination.label, settings.experimentalEngine, downloadActive)
                     Box(Modifier.fillMaxSize()) {
                         when (destination) {
-                            Destination.Download -> DownloadScreen(settings.defaultFormat) { viewModel.enqueue(it.request); destination = Destination.Queue }
+                            Destination.Download -> DownloadScreen(
+                                settings.defaultFormat,
+                                sourceInspection,
+                                viewModel::inspectAndEnqueue,
+                                viewModel::enqueuePlaylist,
+                                viewModel::clearSourceInspection,
+                            )
                             Destination.Queue -> QueueScreen(queue, viewModel::cancel, viewModel::delete)
                             Destination.History -> HistoryScreen(history, viewModel::retry)
                             Destination.Player -> PlayerScreen(history)
-                            Destination.Settings -> SettingsScreen(settings, viewModel::setDefaultFormat, viewModel::setReducedMotion, viewModel::setWifiOnly, viewModel::setExperimentalEngine, notificationsAllowed, onRequestNotifications) { destination = Destination.About }
+                            Destination.Settings -> SettingsScreen(settings, viewModel::setDefaultFormat, viewModel::setReducedMotion, viewModel::setWifiOnly, viewModel::setExperimentalEngine, notificationsAllowed, onRequestNotifications, crashReport, viewModel::clearCrashReport) { destination = Destination.About }
                             Destination.About -> AboutScreen { destination = Destination.Settings }
                         }
                     }

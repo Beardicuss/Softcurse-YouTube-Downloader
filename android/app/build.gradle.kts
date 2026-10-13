@@ -124,7 +124,7 @@ dependencies {
     implementation("androidx.room:room-runtime:2.8.5")
     implementation("androidx.room:room-ktx:2.8.5")
     implementation("androidx.work:work-runtime-ktx:2.12.0")
-    implementation("dev.ffmpegkit-maintained:yt-dlp-android:2.0.2")
+    implementation("io.github.junkfood02.youtubedl-android:library:0.18.1")
     implementation("dev.ffmpegkit-maintained:ffmpeg-kit-audio:8.1.9")
     kapt("androidx.room:room-compiler:2.8.5")
 
@@ -132,6 +132,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20251224")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }

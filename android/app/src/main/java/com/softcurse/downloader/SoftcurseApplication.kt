@@ -10,5 +10,15 @@ class SoftcurseApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching { container.crashReports.capture(thread, error) }
+            if (previousHandler != null) {
+                previousHandler.uncaughtException(thread, error)
+            } else {
+                android.os.Process.killProcess(android.os.Process.myPid())
+                kotlin.system.exitProcess(10)
+            }
+        }
     }
 }

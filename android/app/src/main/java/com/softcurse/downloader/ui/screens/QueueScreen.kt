@@ -30,7 +30,14 @@ fun QueueScreen(items: List<QueueItem>, onCancel: (String) -> Unit, onRemove: (S
                         StatusPill(item.state.name, accent)
                         Text(item.request.format.label, color = HexCyan, style = MaterialTheme.typography.labelLarge)
                     }
-                    Text(item.request.url, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    item.request.playlistTitle?.let { playlist ->
+                        Text(
+                            "$playlist // ${item.request.playlistIndex}/${item.request.playlistCount}",
+                            color = HexTextMuted,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                    Text(item.request.title ?: item.request.url, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     item.errorMessage?.let { Text(it, color = HexGold, style = MaterialTheme.typography.bodyMedium) }
                     LinearProgressIndicator(progress = { item.progress / 100f }, modifier = Modifier.fillMaxWidth(), color = accent, trackColor = accent.copy(alpha = 0.12f))
                     MetricRow {

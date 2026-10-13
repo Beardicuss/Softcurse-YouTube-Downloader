@@ -19,13 +19,13 @@ import com.softcurse.downloader.R
 import com.softcurse.downloader.data.SoftcurseDatabase
 import com.softcurse.downloader.data.MediaExporter
 import com.softcurse.downloader.data.StorageGuard
+import com.softcurse.downloader.data.YtDlpRuntime
 import com.softcurse.downloader.data.storageFailureMessage
 import com.softcurse.downloader.domain.DownloadState
 import com.softcurse.downloader.domain.MediaFormat
-import dev.ffmpegkit_maintained.ytdlp.YtDlp
-import dev.ffmpegkit_maintained.ytdlp.YtDlpRequest
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
 import java.io.File
-import java.util.concurrent.Future
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -98,27 +98,32 @@ class OnDeviceDownloadWorker(context: Context, parameters: WorkerParameters) :
         val directory = downloadDirectory()
         val storage = StorageGuard(applicationContext)
         storage.requireDownloadHeadroom()
-        YtDlp.init(applicationContext)
+        YtDlpRuntime.ensureCurrent(applicationContext)
         val format = MediaFormat.entries.firstOrNull { it.name == formatName } ?: MediaFormat.Mp3
-        val request = YtDlpRequest(url)
-            .setOutputTemplate(File(directory, "$id.%(ext)s").absolutePath)
+        val request = YoutubeDLRequest(url)
+            .addOption("-o", File(directory, "$id.%(ext)s").absolutePath)
+            .addOption("--no-playlist")
         if (format == MediaFormat.Mp4) {
             val height = quality.filter(Char::isDigit).ifBlank { "1080" }
             request.addOption("-f", "best[ext=mp4][height<=$height]/best[ext=mp4]/best")
         } else {
             request.addOption("-f", "bestaudio/best")
         }
-        val future: Future<dev.ffmpegkit_maintained.ytdlp.YtDlpResponse> = YtDlp.executeAsync(request) { progress, _, line ->
-            val value = progress.toInt().coerceIn(0, 95)
-            setProgressAsync(workDataOf(FakeDownloadWorker.KEY_PROGRESS to value))
-            setForegroundAsync(foregroundInfo(id, value, line.take(80)))
-            val stillRunning = runBlocking { dao.updateProgressIfRunning(id, value) > 0 }
-            if (isStopped || !stillRunning) throw CancellationException("Download cancelled")
-        }
         val response = try {
-            runInterruptible { future.get() }
+            runInterruptible {
+                YoutubeDL.execute(request, id) { progress, _, line ->
+                    val value = progress.toInt().coerceIn(0, 95)
+                    setProgressAsync(workDataOf(FakeDownloadWorker.KEY_PROGRESS to value))
+                    setForegroundAsync(foregroundInfo(id, value, line.take(80)))
+                    val stillRunning = runBlocking { dao.updateProgressIfRunning(id, value) > 0 }
+                    if (isStopped || !stillRunning) {
+                        YoutubeDL.destroyProcessById(id)
+                        throw CancellationException("Download cancelled")
+                    }
+                }
+            }
         } catch (cancelled: CancellationException) {
-            future.cancel(true)
+            YoutubeDL.destroyProcessById(id)
             throw cancelled
         }
         check(response.exitCode == 0) { "yt-dlp exited with code ${response.exitCode}" }
